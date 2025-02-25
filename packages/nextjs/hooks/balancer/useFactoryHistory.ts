@@ -9,6 +9,8 @@ export const useFactoryHistory = () => {
   const [sumPools, setSumPools] = useState<Address[]>([]);
   const [productPools, setProductPools] = useState<Address[]>([]);
   const [weightedPools, setWeightedPools] = useState<Address[]>([]);
+  // TODO
+  // const [cocswapPools, setCocswapPools] = useState<Address[]>([]);
 
   useScaffoldEventSubscriber({
     contractName: "ConstantSumFactory",
@@ -48,6 +50,20 @@ export const useFactoryHistory = () => {
       });
     },
   });
+
+  // TODO
+  // useScaffoldEventSubscriber({
+  //   contractName: "CocswapPoolFactory",
+  //   eventName: "PoolCreated",
+  //   listener: logs => {
+  //     logs.forEach(log => {
+  //       const { pool } = log.args;
+  //       if (pool) {
+  //         setWeightedPools(pools => [...pools, pool]);
+  //       }
+  //     });
+  //   },
+  // });
 
   // Fetches the history of pools deployed via factory
   const { data: sumPoolHistory, isLoading: isLoadingSumPoolHistory } = useScaffoldEventHistory({
