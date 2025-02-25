@@ -1,8 +1,8 @@
-# 🏗︎ Scaffold Balancer v3
+# 🐔 COCSwap on Scaffold Balancer v3
 
-A starter kit for building on top of Balancer v3. Accelerate the process of creating custom pools and hooks contracts. Concentrate on mastering the core concepts within a swift and responsive environment augmented by a local fork and a frontend pool operations playground.
+COCSwap example on Balancer v3. [More details on COCSwap found on this blog post.](https://blog.ezkl.xyz/post/cocswap/)
 
-![image](https://github.com/user-attachments/assets/2f7538cf-d252-43be-9a9a-c8b84a37349c)
+![image](./img.jpg)
 
 ## ✨ Features
 
