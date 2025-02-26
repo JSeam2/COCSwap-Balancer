@@ -9,12 +9,12 @@ import {
 import { IVault } from "@balancer-labs/v3-interfaces/contracts/vault/IVault.sol";
 import { BasePoolFactory } from "@balancer-labs/v3-pool-utils/contracts/BasePoolFactory.sol";
 
-import { ConstantSumPool } from "../pools/ConstantSumPool.sol";
+import { COCSwapPool } from "../pools/COCSwapPool.sol";
 
 /**
- * @title Constant Sum Factory
- * @notice This custom pool factory is based on the example from the Balancer v3 docs
- * https://docs-v3.balancer.fi/build-a-custom-amm/build-an-amm/deploy-custom-amm-using-factory.html
+ * @title COCSwap Factory
+ * @notice The COCSwap Factory helps deploy COC enabled pools
+ * https://blog.ezkl.xyz/post/cocswap/
  */
 contract COCSwapFactory is BasePoolFactory {
     /**
@@ -26,7 +26,7 @@ contract COCSwapFactory is BasePoolFactory {
     constructor(
         IVault vault,
         uint32 pauseWindowDuration
-    ) BasePoolFactory(vault, pauseWindowDuration, type(ConstantSumPool).creationCode) {}
+    ) BasePoolFactory(vault, pauseWindowDuration, type(COCSwapPool).creationCode) {}
 
     /**
      * @notice Deploys a new pool and registers it with the vault
