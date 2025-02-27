@@ -15,29 +15,39 @@ import { IVault } from "@balancer-labs/v3-interfaces/contracts/vault/IVault.sol"
 import { PoolHelpers, CustomPoolConfig, InitializationConfig } from "./PoolHelpers.sol";
 import { ScaffoldHelpers, console } from "./ScaffoldHelpers.sol";
 import { COCSwapFactory } from "../contracts/factories/COCSwapFactory.sol";
-import { LotteryHookExample } from "../contracts/hooks/LotteryHookExample.sol";
+import { ExitFeeHookExample } from "../contracts/hooks/ExitFeeHookExample.sol";
 
 /**
- * @title Deploy Constant Product Pool
- * @notice Deploys, registers, and initializes a constant product pool that uses a Lottery Hook
+ * @title Deploy COCSwap Pool
+ * @notice Deploys, registers, and initializes a constant product pool that uses a Exit Fee Hook.
+ * The exit fee hook returns values back to the LP holders.
+ * A pool creator can mint a custom ERC20 and add it to their pools to earn some kind of management fee.
+ * Preferably keep the % of tokens low.
+ * A meta pool can be created which aggregates all the COCSwap pools ERC20 to create an aggregate
  */
 contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
-    function deployCOCSwapProductPool(address token1, address token2) internal {
+    function deployCOCSwapPool(
+        address token0,
+        address token1,
+        address token2,
+        address token3,
+        address token4,
+        address token5,
+    ) internal {
         // Set the deployment configurations
-        CustomPoolConfig memory poolConfig = getProductPoolConfig(token1, token2);
-        InitializationConfig memory initConfig = getProductPoolInitConfig(token1, token2);
+        InitializationConfig memory initConfig = getWeightedPoolInitConfig(token1, token2);
 
         // Start creating the transactions
         uint256 deployerPrivateKey = getDeployerPrivateKey();
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy a factory
-        ConstantProductFactory factory = new ConstantProductFactory(vault, 365 days); //pauseWindowDuration
+        ConstantProductFactory factory = new COCSwapFactory(vault, 365 days); //pauseWindowDuration
         console.log("Constant Product Factory deployed at: %s", address(factory));
 
         // Deploy a hook
-        address lotteryHook = address(new LotteryHookExample(vault, address(router)));
-        console.log("LotteryHookExample deployed at address: %s", lotteryHook);
+        address exitFeeHook = address(new ExitFeeHookExample(vault, address(router)));
+        console.log("ExitFeeHookExample deployed at address: %s", exitFeeHook);
 
         // Deploy a pool and register it with the vault
         address pool = factory.create(
@@ -48,10 +58,10 @@ contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
             poolConfig.swapFeePercentage,
             poolConfig.protocolFeeExempt,
             poolConfig.roleAccounts,
-            lotteryHook, // poolHooksContract
+            exitFeeHook, // poolHooksContract
             poolConfig.liquidityManagement
         );
-        console.log("Constant Product Pool deployed at: %s", pool);
+        console.log("COCSwapPool deployed at: %s", pool);
 
         // Approve the router to spend tokens for pool initialization
         approveRouterWithPermit2(initConfig.tokens);
@@ -65,7 +75,7 @@ contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
             initConfig.wethIsEth,
             initConfig.userData
         );
-        console.log("Constant Product Pool initialized successfully!");
+        console.log("COCSwap Pool initialized successfully!");
         vm.stopBroadcast();
     }
 
@@ -75,9 +85,13 @@ contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
      * For STANDARD tokens, the rate provider address must be 0, and paysYieldFees must be false.
      * All WITH_RATE tokens need a rate provider, and may or may not be yield-bearing.
      */
-    function getProductPoolConfig(
+    function getCOCSwapPoolConfig(
+        address token0,
         address token1,
-        address token2
+        address token2,
+        address token3,
+        address token4,
+        address token5,
     ) internal view returns (CustomPoolConfig memory config) {
         string memory name = "COCSwap Pool"; // name for the pool
         string memory symbol = "COC"; // symbol for the BPT
@@ -106,7 +120,7 @@ contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
             poolCreator: address(0) // Account empowered to set the pool creator fee percentage
         });
         LiquidityManagement memory liquidityManagement = LiquidityManagement({
-            disableUnbalancedLiquidity: true, // Must be true to register pool with the Lottery Hook
+            disableUnbalancedLiquidity: true, // set to true to make the pool weights stable
             enableAddLiquidityCustom: false,
             enableRemoveLiquidityCustom: false,
             enableDonation: false

@@ -75,6 +75,7 @@ interface IOdosRouter {
 contract COCSwapPool is IWeightedPool, BalancerPoolToken {
     using FixedPoint for uint256;
 
+    // constants
     uint256 public constant _MIN_INVARIANT_RATIO = 70e16; // 70%
     uint256 public constant _MAX_INVARIANT_RATIO = 300e16; // 300%
     uint256 public constant _MIN_SWAP_FEE_PERCENTAGE = 0.001e16; // 0.001%
@@ -84,7 +85,12 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
     // implementation of the fixed point power function, as these ratios are often exponents.
     uint256 internal constant _MIN_WEIGHT = 1e16; // 1%
 
+    // initialization
     uint256 public totalTokens;
+    uint256 public pool
+    IHalo2Verifier public verifier;
+    IOdosRouter public odosRouter;
+
 
     // current weights, note that we reduced this from 8 to 6
     uint256 public normalizedWeight0;
@@ -102,11 +108,14 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
     uint256 public pendingWeight4;
     uint256 public pendingWeight5;
 
-    // timelock
-    uint64 public timelock;
+    // time in seconds, delay till next rebalance
+    uint64 public rebalanceDelay;
+    // time in seconds, short cooldown (1min) after each rebalance to prevent sniping
+    uint64 public cooldown;
+    // time in seconds, timestamp where rebalance happened
+    uint64 public lastRebalanceTime;
 
-    // Halo2Verifier
-    IHalo2Verfier public verifier;
+
 
     /**
      * @notice `getRate` from `IRateProvider` was called on a Weighted Pool.
@@ -166,7 +175,7 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
      */
     function initialize(
         address _pool,
-        address _zkVerifier,
+        address _verifier,
         address _odosRouter,
         address _oracleDataProvider,
         uint256 _rebalanceTimelock
@@ -175,14 +184,13 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
         require(_pool != address(0), "Invalid pool address");
 
         pool = _pool;
-        zkVerifier = IHalo2Verifier(_zkVerifier);
+        verifier = IHalo2Verifier(_verifier);
         odosRouter = IOdosRouter(_odosRouter);
         oracleDataProvider = _oracleDataProvider;
         rebalanceTimelock = _rebalanceTimelock;
-        admin = msg.sender;
         lastRebalanceTime = block.timestamp;
 
-        emit HooksInitialized(_pool, _zkVerifier, _odosRouter);
+        emit InitializedCOCSwapPool(_pool, _zkVerifier, _odosRouter);
     }
 
     /**
