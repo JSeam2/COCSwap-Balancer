@@ -2,8 +2,7 @@
 pragma solidity ^0.8.24;
 
 import { BalancerPoolToken } from "@balancer-labs/v3-vault/contracts/BalancerPoolToken.sol";
-import { IWeightedPool } from "@balancer-labs/v3-interfaces/contracts/pool-weighted/IWeightedPool.sol";
-import { PoolSwapParams, Rounding } from "@balancer-labs/v3-interfaces/contracts/vault/VaultTypes.sol";
+import { PoolSwapParams, Rounding, SwapKind, PoolConfig } from "@balancer-labs/v3-interfaces/contracts/vault/VaultTypes.sol";
 import { IVault } from "@balancer-labs/v3-interfaces/contracts/vault/IVault.sol";
 import { FixedPoint } from "@balancer-labs/v3-solidity-utils/contracts/math/FixedPoint.sol";
 import { WeightedMath } from "@balancer-labs/v3-solidity-utils/contracts/math/WeightedMath.sol";
@@ -11,19 +10,14 @@ import { InputHelpers } from "@balancer-labs/v3-solidity-utils/contracts/helpers
 import {
     IUnbalancedLiquidityInvariantRatioBounds
 } from "@balancer-labs/v3-interfaces/contracts/vault/IUnbalancedLiquidityInvariantRatioBounds.sol";
+import {
+    IWeightedPool,
+    WeightedPoolDynamicData,
+    WeightedPoolImmutableData
+} from "@balancer-labs/v3-interfaces/contracts/pool-weighted/IWeightedPool.sol";
+import { PoolInfo } from "@balancer-labs/v3-pool-utils/contracts/PoolInfo.sol";
+import { IHalo2Verifier } from "./IHalo2Verifier.sol";
 
-
-/**
- * @title Halo2Verifier from ezkl
- * @notice This is the Halo2Verifier from the ezkl library
- * You will need to obtain the PK (proving key) in order to generate the proof and instances
- */
-interface IHalo2Verifier {
-    function verifyProof(
-        bytes calldata proof,
-        uint256[] calldata instances
-    ) external returns (bool)
-}
 
 /**
  * @title IOdosRouter
@@ -61,9 +55,8 @@ interface IOdosRouter {
     )
         external
         payable
-        returns (uint256[] memory amountsOut)
+        returns (uint256[] memory amountsOut);
 }
-
 
 
 /**
@@ -72,8 +65,19 @@ interface IOdosRouter {
  * The rebalancing is made verifiable using EZKL Halo2Verifier.
  * https://blog.ezkl.xyz/post/cocswap/
  */
-contract COCSwapPool is IWeightedPool, BalancerPoolToken {
+contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
     using FixedPoint for uint256;
+
+    struct COCSwapPoolParams {
+        string name;
+        string symbol;
+        uint8 totalTokens;
+        uint256[] weights;
+        address _verifier;
+        address _odosRouter;
+        address _odosExecutor;
+        uint256 _rebalanceTimelock;
+    }
 
     // constants
     uint256 public constant _MIN_INVARIANT_RATIO = 70e16; // 70%
@@ -86,20 +90,13 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
     uint256 internal constant _MIN_WEIGHT = 1e16; // 1%
 
     // initialization
-    uint256 public totalTokens;
-    uint256 public pool
-    IHalo2Verifier public verifier;
-    IOdosRouter public odosRouter;
-    address public odosExecutor;
+    uint8 public immutable totalTokens;
+    IHalo2Verifier public immutable verifier;
+    IOdosRouter public immutable odosRouter;
+    address public immutable odosExecutor;
 
-
-    // current weights, note that we reduced this from 8 to 6
-    uint256 public normalizedWeight0;
-    uint256 public normalizedWeight1;
-    uint256 public normalizedWeight2;
-    uint256 public normalizedWeight3;
-    uint256 public normalizedWeight4;
-    uint256 public normalizedWeight5;
+    // current weights
+    mapping (uint8 => uint256) public normalizedWeights;
 
     // time in seconds, delay till next rebalance
     uint64 public rebalanceTimelock;
@@ -124,63 +121,25 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
 
     error VerificationFail();
 
+    error DivisionByZero();
+
+    error AlreadyInitialized();
+
 
     /// @notice remember to initialize the weights by running the optimization algo
-    constructor(IVault vault, string memory name, string memory symbol) BalancerPoolToken(vault, name, symbol) {
-        totalTokens = params.numTokens;
-        InputHelpers.ensureInputLengthMatch(totalTokens, params.normalizedWeights.length);
+    constructor(
+        IVault vault,
+        COCSwapPoolParams memory params
+    ) BalancerPoolToken(vault, params.name, params.symbol) {
+        totalTokens = params.totalTokens;
+        _normalizeWeights(params.weights);
 
-        // Ensure each normalized weight is above the minimum.
-        uint256 normalizedSum = 0;
-        for (uint8 i = 0; i < totalTokens; ++i) {
-            uint256 _normalizedWeight = params.normalizedWeights[i];
-
-            if (_normalizedWeight < _MIN_WEIGHT) {
-                revert MinWeight();
-            }
-            normalizedSum = normalizedSum + _normalizedWeight;
-
-            // prettier-ignore
-            if (i == 0) { normalizedWeight0 = _normalizedWeight; }
-            else if (i == 1) { normalizedWeight1 = _normalizedWeight; }
-            else if (i == 2) { normalizedWeight2 = _normalizedWeight; }
-            else if (i == 3) { normalizedWeight3 = _normalizedWeight; }
-            else if (i == 4) { normalizedWeight4 = _normalizedWeight; }
-            else if (i == 5) { normalizedWeight5 = _normalizedWeight; }
-        }
-
-        // Ensure that the normalized weights sum to ONE.
-        if (normalizedSum != FixedPoint.ONE) {
-            revert NormalizedWeightInvariant();
-        }
-    }
-
-    /**
-     * @notice Initialize the hooks contract
-     * @dev This function is called instead of a constructor since the pool will be deployed via factory
-     * @param _pool The pool address this hooks contract is associated with
-     * @param _verifier The Halo2 verifier contract
-     * @param _odosRouter The Odos router for executing swaps
-     * @param _rebalanceTimelock Minimum time between rebalances
-     */
-    function initialize(
-        address _pool,
-        address _verifier,
-        address _odosRouter,
-        address _odosExecutor,
-        uint256 _rebalanceTimelock
-    ) external {
-        require(pool == address(0), "Already initialized");
-        require(_pool != address(0), "Invalid pool address");
-
-        pool = _pool;
-        verifier = IHalo2Verifier(_verifier);
-        odosRouter = IOdosRouter(_odosRouter);
-        odosExecutor = _odosExecutor;
-        rebalanceTimelock = _rebalanceTimelock;
+        verifier = IHalo2Verifier(params.verifier);
+        odosRouter = IOdosRouter(params.odosRouter);
+        odosExecutor = params.odosExecutor;
+        rebalanceTimelock = params.rebalanceTimelock;
         lastRebalanceTime = block.timestamp;
 
-        emit InitializedCOCSwapPool(_pool, _zkVerifier, _odosRouter);
     }
 
     /**
@@ -195,9 +154,9 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
         if (params.kind == SwapKind.EXACT_IN) {
             uint256 amountOutScaled18 = WeightedMath.computeOutGivenExactIn(
                 balanceTokenInScaled18,
-                _getNormalizedWeight(params.indexIn),
+                normalizedWeights[params.indexIn],
                 balanceTokenOutScaled18,
-                _getNormalizedWeight(params.indexOut),
+                normalizedWeights[params.indexOut],
                 params.amountGivenScaled18
             );
 
@@ -205,9 +164,9 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
         } else {
             uint256 amountInScaled18 = WeightedMath.computeInGivenExactOut(
                 balanceTokenInScaled18,
-                _getNormalizedWeight(params.indexIn),
+                normalizedWeights[params.indexIn],
                 balanceTokenOutScaled18,
-                _getNormalizedWeight(params.indexOut),
+                normalizedWeights[params.indexOut],
                 params.amountGivenScaled18
             );
 
@@ -228,7 +187,7 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
             ? WeightedMath.computeInvariantUp
             : WeightedMath.computeInvariantDown;
 
-        return _upOrDown(_getNormalizedWeights(), balancesLiveScaled18);
+        return _upOrDown(normalizedWeights(), balancesLiveScaled18);
     }
 
     /**
@@ -247,7 +206,7 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
          return
             WeightedMath.computeBalanceOutGivenInvariant(
                 balancesLiveScaled18[tokenInIndex],
-                _getNormalizedWeight(tokenInIndex),
+                normalizedWeights[tokenInIndex],
                 invariantRatio
             );
     }
@@ -256,206 +215,193 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
      * @notice Get the normalized weights.
      * @return normalizedWeights The normalized weights, sorted in token registration order
      */
-    function getNormalizedWeights() external view returns (uint256[] memory) {
-        return _getNormalizedWeights();
-    }
+    function getNormalizedWeights() public view returns (uint256[] memory) {
+        uint256[] memory weights = new uint256[](totalTokens);
 
-    function _getNormalizedWeight(uint256 tokenIndex) internal view virtual returns (uint256) {
-        // prettier-ignore
-        if (tokenIndex == 0) { return _normalizedWeight0; }
-        else if (tokenIndex == 1) { return _normalizedWeight1; }
-        else if (tokenIndex == 2) { return _normalizedWeight2; }
-        else if (tokenIndex == 3) { return _normalizedWeight3; }
-        else if (tokenIndex == 4) { return _normalizedWeight4; }
-        else if (tokenIndex == 5) { return _normalizedWeight5; }
-        else {
-            revert IVaultErrors.InvalidToken();
-        }
-    }
-
-    function _getNormalizedWeights() internal view virtual returns (uint256[] memory) {
-        uint256 _totalTokens = totalTokens;
-        uint256[] memory normalizedWeights = new uint256[](_totalTokens);
-
-        // prettier-ignore
-        {
-            normalizedWeights[0] = _normalizedWeight0;
-            normalizedWeights[1] = _normalizedWeight1;
-            if (totalTokens > 2) { normalizedWeights[2] = _normalizedWeight2; } else { return normalizedWeights; }
-            if (totalTokens > 3) { normalizedWeights[3] = _normalizedWeight3; } else { return normalizedWeights; }
-            if (totalTokens > 4) { normalizedWeights[4] = _normalizedWeight4; } else { return normalizedWeights; }
-            if (totalTokens > 5) { normalizedWeights[5] = _normalizedWeight5; }
+        for (uint256 i = 0; i < totalTokens; ++i) {
+            weights[i] = normalizedWeights[i];
         }
 
-        return normalizedWeights;
+        return weights;
     }
 
-    function _getNormalizedWeight(uint256 tokenIndex) internal view virtual returns (uint256) {
-        // prettier-ignore
-        if (tokenIndex == 0) { return _normalizedWeight0; }
-        else if (tokenIndex == 1) { return _normalizedWeight1; }
-        else if (tokenIndex == 2) { return _normalizedWeight2; }
-        else if (tokenIndex == 3) { return _normalizedWeight3; }
-        else if (tokenIndex == 4) { return _normalizedWeight4; }
-        else if (tokenIndex == 5) { return _normalizedWeight5; }
-        else if (tokenIndex == 6) { return _normalizedWeight6; }
-        else if (tokenIndex == 7) { return _normalizedWeight7; }
-        else {
-            revert IVaultErrors.InvalidToken();
-        }
-    }
 
     /**
      * @notice The rebalance is done in 2 stages. updateWeights is needed for the first step. This is reliant on the ezkl circuit
      * @param proof The Zero Knowledge Proof bytestring
      * @param instances The instances used in the Zero Knowledge Proof
      */
-    function updateWeights(bytes calldata proof, uint256[] calldata instances) external {
+    function updateWeights(bytes calldata proof, uint256[] calldata instances) public {
+        // Chainlink only offers a single data slice which isn't sufficient for our models
         // TODO: We need a way to prove the data used here somehow
         // TODO: to decide if this should be protected???
-        // Chainlink only offers a single data slice which isn't sufficient for our models
-        InputHelpers.ensureInputLengthMatch(totalTokens, params.normalizedWeights.length);
-
-        for (uint8 i = 0; i < _totalTokens; ++i) {
-            // We use FixedPoint operations to ensure proper rounding
-            uint256 normalizedWeight = instances[i];
-
-            // Validate each weight meets minimum requirement
-            if (normalizedWeight < _MIN_WEIGHT) {
-                revert MinWeight();
-            }
-
-            normalizedWeights[i] = normalizedWeight;
-            normalizedSum = normalizedSum + normalizedWeight;
-        }
-
-        // Ensure that the normalized weights sum to ONE with proper rounding tolerance
-        // Using a small epsilon to account for potential rounding errors
-        if (normalizedSum < FixedPoint.ONE - 10 || normalizedSum > FixedPoint.ONE + 10) {
-            revert NormalizedWeightInvariant();
-        }
-
-        // Assign pending weights with verified values
-        for (uint8 i = 0; i < _totalTokens; ++i) {
-            // prettier-ignore
-            if (i == 0) { normalizedWeight0 = normalizedWeights[i]; }
-            else if (i == 1) { normalizedWeight1 = normalizedWeights[i]; }
-            else if (i == 2) { normalizedWeight2 = normalizedWeights[i]; }
-            else if (i == 3) { normalizedWeight3 = normalizedWeights[i]; }
-            else if (i == 4) { normalizedWeight4 = normalizedWeights[i]; }
-            else if (i == 5) { normalizedWeight5 = normalizedWeights[i]; }
-        }
-
         if (!verifier.verifyProof(proof, instances)) {
             revert VerificationFail();
-        };
+        }
 
+        _normalizeWeights(instances);
     }
 
     /**
-     * @notice The rebalance is done in 2 stages. rebalance is the second stage. This is reliant on an swap router like odos.
-     * note that we will experience alpha decay once the pool has more money as slippage will increase.
-     * @param pathDefinition the odos router path definition obtained from Odos API
+     * @notice pass an array of weights this doesn't need to sum to one.
+     * This routine gets the % weight given total sum. In the event of out of ranges it clips values.
      */
-    function rebalance(bytes memory pathDefinition) external {
-        // Get current balances and calculate total value
-        uint256[] memory currentBalances = new uint256[](_totalTokens);
-        uint256[] memory targetBalances = new uint256[](_totalTokens);
-        address[] memory tokenAddresses = new address[](_totalTokens);
-        uint256 totalValue = 0;
+    function _normalizeWeights(uint256[] calldata weights) internal {
+        uint256 normalizedSum = 0;
+        uint256 totalSum = 0;
+        uint256 appliedSum = 0;
 
-        // Get current balances and token addresses
-        for (uint8 i = 0; i < _totalTokens; ++i) {
-            tokenAddresses[i] = tokens[i];
-            currentBalances[i] = IERC20(tokens[i]).balanceOf(address(this));
-            totalValue += currentBalances[i] * getTokenPrice(tokens[i]);
+        // get total sum
+        for (uint8 i = 0; i < totalTokens; ++i) {
+            totalSum = totalSum + weights[i];
         }
 
-        // Calculate target balances based on normalized weights
-        uint256[] memory normalizedWeights = new uint256[](_totalTokens);
-        for (uint8 i = 0; i < _totalTokens; ++i) {
-            if (i == 0) { normalizedWeights[i] = normalizedWeight0; }
-            else if (i == 1) { normalizedWeights[i] = normalizedWeight1; }
-            else if (i == 2) { normalizedWeights[i] = normalizedWeight2; }
-            else if (i == 3) { normalizedWeights[i] = normalizedWeight3; }
-            else if (i == 4) { normalizedWeights[i] = normalizedWeight4; }
-            else if (i == 5) { normalizedWeights[i] = normalizedWeight5; }
-
-            // Calculate target balance based on weight
-            targetBalances[i] = (totalValue * normalizedWeights[i]) / FixedPoint.ONE;
-            // TODO get token price from chainlink
-            targetBalances[i] = targetBalances[i] / getTokenPrice(tokens[i]);
+        if (totalSum == 0) {
+            revert DivisionByZero();
         }
 
-        // Determine which tokens to sell (input) and which to buy (output)
-        IOdosRouter.inputTokenInfo[] memory inputs = new IOdosRouter.inputTokenInfo[](0);
-        IOdosRouter.outputTokenInfo[] memory outputs = new IOdosRouter.outputTokenInfo[](0);
 
-        // First, count how many inputs and outputs we'll have
-        uint256 inputCount = 0;
-        uint256 outputCount = 0;
+        // Calculate normalized weights
+        for (uint256 i = 0; i < totalTokens; ++i) {
+            // Calculate weight as a percentage (scaled to 1e18 for precision)
+            uint256 normalizedWeight = weights[i] * 1e18 / totalSum;
 
-        for (uint8 i = 0; i < _totalTokens; ++i) {
-            if (currentBalances[i] > targetBalances[i]) {
-                inputCount++;
-            } else if (currentBalances[i] < targetBalances[i]) {
-                outputCount++;
+            // Apply minimum weight constraint
+            if (normalizedWeight < _MIN_WEIGHT) {
+                normalizedWeights[i] = _MIN_WEIGHT;
+                appliedSum += _MIN_WEIGHT;
+            } else {
+                normalizedWeights[i] = normalizedWeight;
+                appliedSum += normalizedWeight;
             }
         }
 
-        // Then, create the arrays with the correct size
-        inputs = new IOdosRouter.inputTokenInfo[](inputCount);
-        outputs = new IOdosRouter.outputTokenInfo[](outputCount);
+        // Handle rounding errors to ensure weights sum to 100%
+        if (appliedSum != 1e18) {
+            // Find the index of the largest weight to adjust
+            uint256 largestIdx = 0;
+            for (uint256 i = 1; i < totalTokens; ++i) {
+                if (normalizedWeights[i] > normalizedWeights[largestIdx] && normalizedWeights[i] > _MIN_WEIGHT) {
+                    largestIdx = i;
+                }
+            }
 
-        // Fill the input and output arrays
-        uint256 inputIndex = 0;
-        uint256 outputIndex = 0;
+            if (appliedSum < 1e18) {
+                // add to the largest weight to make the sum exactly 100%
+                normalizedWeights[largestIdx] = normalizedWeights[largestIdx] + (1e18 - appliedSum);
+            } else {
+                // remove from the largest weight to make the sum exactly 100%
+                normalizedWeights[largestIdx] = normalizedWeights[largestIdx] - (appliedSum - 1e18);
 
-        for (uint8 i = 0; i < _totalTokens; ++i) {
-            if (currentBalances[i] > targetBalances[i]) {
-                // We need to sell some of this token
-                uint256 amountToSell = currentBalances[i] - targetBalances[i];
-                inputs[inputIndex] = IOdosRouter.inputTokenInfo({
-                    tokenAddress: tokens[i],
-                    amountIn: amountToSell,
-                    receiver: address(this)
-                });
-                ++inputIndex
-            } else if (currentBalances[i] < targetBalances[i]) {
-                // We need to buy some of this token
-                // For relative value, use the difference in value terms
-                uint256 valueNeeded = (targetBalances[i] - currentBalances[i]) * getTokenPrice(tokens[i]);
-                outputs[outputIndex] = IOdosRouter.outputTokenInfo({
-                    tokenAddress: tokens[i],
-                    relativeValue: valueNeeded,
-                    receiver: address(this)
-                });
-                ++outputIndex
             }
         }
 
-        // Skip if no rebalancing needed
-        if (inputs.length == 0 || outputs.length == 0) {
-            return;
-        }
-
-        // Approve the router to spend our tokens
-        for (uint256 i = 0; i < inputs.length; i++) {
-            IERC20(inputs[i].tokenAddress).approve(address(odosRouter), inputs[i].amountIn);
-        }
-
-        // Execute the swap
-        odosRouter.swapMulti(
-            inputs,
-            outputs,
-            0, // We're setting minimum value out to 0 to ensure the transaction doesn't revert
-            pathDefinition,
-            odosExecutor,
-            0 // No referral code
-        );
-
-        emit Rebalanced();
     }
+
+    // /**
+    //  * @notice The rebalance is done in 2 stages. rebalance is the second stage. This is reliant on an swap router like odos.
+    //  * note that we will experience alpha decay once the pool has more money as slippage will increase.
+    //  * @param pathDefinition the odos router path definition obtained from Odos API
+    //  */
+    // function rebalance(bytes memory pathDefinition) external {
+    //     // Get current balances and calculate total value
+    //     uint256[] memory currentBalances = new uint256[](_totalTokens);
+    //     uint256[] memory targetBalances = new uint256[](_totalTokens);
+    //     address[] memory tokenAddresses = new address[](_totalTokens);
+    //     uint256 totalValue = 0;
+
+    //     // Get current balances and token addresses
+    //     for (uint8 i = 0; i < _totalTokens; ++i) {
+    //         tokenAddresses[i] = tokens[i];
+    //         currentBalances[i] = IERC20(tokens[i]).balanceOf(address(this));
+    //         totalValue += currentBalances[i] * getTokenPrice(tokens[i]);
+    //     }
+
+    //     // Calculate target balances based on normalized weights
+    //     uint256[] memory normalizedWeights = new uint256[](_totalTokens);
+    //     for (uint8 i = 0; i < _totalTokens; ++i) {
+    //         if (i == 0) { normalizedWeights[i] = normalizedWeight0; }
+    //         else if (i == 1) { normalizedWeights[i] = normalizedWeight1; }
+    //         else if (i == 2) { normalizedWeights[i] = normalizedWeight2; }
+    //         else if (i == 3) { normalizedWeights[i] = normalizedWeight3; }
+    //         else if (i == 4) { normalizedWeights[i] = normalizedWeight4; }
+    //         else if (i == 5) { normalizedWeights[i] = normalizedWeight5; }
+
+    //         // Calculate target balance based on weight
+    //         targetBalances[i] = (totalValue * normalizedWeights[i]) / FixedPoint.ONE;
+    //         // TODO get token price from chainlink
+    //         targetBalances[i] = targetBalances[i] / getTokenPrice(tokens[i]);
+    //     }
+
+    //     // Determine which tokens to sell (input) and which to buy (output)
+    //     IOdosRouter.inputTokenInfo[] memory inputs = new IOdosRouter.inputTokenInfo[](0);
+    //     IOdosRouter.outputTokenInfo[] memory outputs = new IOdosRouter.outputTokenInfo[](0);
+
+    //     // First, count how many inputs and outputs we'll have
+    //     uint256 inputCount = 0;
+    //     uint256 outputCount = 0;
+
+    //     for (uint8 i = 0; i < _totalTokens; ++i) {
+    //         if (currentBalances[i] > targetBalances[i]) {
+    //             inputCount++;
+    //         } else if (currentBalances[i] < targetBalances[i]) {
+    //             outputCount++;
+    //         }
+    //     }
+
+    //     // Then, create the arrays with the correct size
+    //     inputs = new IOdosRouter.inputTokenInfo[](inputCount);
+    //     outputs = new IOdosRouter.outputTokenInfo[](outputCount);
+
+    //     // Fill the input and output arrays
+    //     uint256 inputIndex = 0;
+    //     uint256 outputIndex = 0;
+
+    //     for (uint8 i = 0; i < _totalTokens; ++i) {
+    //         if (currentBalances[i] > targetBalances[i]) {
+    //             // We need to sell some of this token
+    //             uint256 amountToSell = currentBalances[i] - targetBalances[i];
+    //             inputs[inputIndex] = IOdosRouter.inputTokenInfo({
+    //                 tokenAddress: tokens[i],
+    //                 amountIn: amountToSell,
+    //                 receiver: address(this)
+    //             });
+    //             ++inputIndex;
+    //         } else if (currentBalances[i] < targetBalances[i]) {
+    //             // We need to buy some of this token
+    //             // For relative value, use the difference in value terms
+    //             uint256 valueNeeded = (targetBalances[i] - currentBalances[i]) * getTokenPrice(tokens[i]);
+    //             outputs[outputIndex] = IOdosRouter.outputTokenInfo({
+    //                 tokenAddress: tokens[i],
+    //                 relativeValue: valueNeeded,
+    //                 receiver: address(this)
+    //             });
+    //             ++outputIndex;
+    //         }
+    //     }
+
+    //     // Skip if no rebalancing needed
+    //     if (inputs.length == 0 || outputs.length == 0) {
+    //         return;
+    //     }
+
+    //     // Approve the router to spend our tokens
+    //     for (uint256 i = 0; i < inputs.length; i++) {
+    //         IERC20(inputs[i].tokenAddress).approve(address(odosRouter), inputs[i].amountIn);
+    //     }
+
+    //     // Execute the swap
+    //     odosRouter.swapMulti(
+    //         inputs,
+    //         outputs,
+    //         0, // We're setting minimum value out to 0 to ensure the transaction doesn't revert
+    //         pathDefinition,
+    //         odosExecutor,
+    //         0 // No referral code
+    //     );
+
+    //     emit Rebalanced();
+    // }
 
     //The minimum swap fee percentage for a pool
     function getMinimumSwapFeePercentage() external pure returns (uint256) {
@@ -477,7 +423,6 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
         return WeightedMath._MAX_INVARIANT_RATIO;
     }
 
-    /// @inheritdoc IWeightedPool
     function getWeightedPoolDynamicData() external view virtual returns (WeightedPoolDynamicData memory data) {
         data.balancesLiveScaled18 = _vault.getCurrentLiveBalances(address(this));
         (, data.tokenRates) = _vault.getPoolTokenRates(address(this));
@@ -490,14 +435,12 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
         data.isPoolInRecoveryMode = poolConfig.isPoolInRecoveryMode;
     }
 
-    /// @inheritdoc IWeightedPool
     function getWeightedPoolImmutableData() external view virtual returns (WeightedPoolImmutableData memory data) {
         data.tokens = _vault.getPoolTokens(address(this));
         (data.decimalScalingFactors, ) = _vault.getPoolTokenRates(address(this));
-        data.normalizedWeights = _getNormalizedWeights();
+        data.normalizedWeights = getNormalizedWeights();
     }
 
-    /// @inheritdoc IRateProvider
     function getRate() public pure override returns (uint256) {
         revert WeightedPoolBptRateUnsupported();
     }

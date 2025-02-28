@@ -20,7 +20,7 @@ contract DeployScript is
     DeployConstantSumPool,
     DeployConstantProductPool,
     DeployWeightedPool8020,
-    DeployCOCSwapPool,
+    DeployCOCSwapPool
 {
     function run() external scaffoldExport {
         // Deploy mock tokens to use for the pools and hooks
@@ -43,8 +43,20 @@ contract DeployScript is
         // Deploy, register, and initialize a weighted pool with an exit fee hook
         deployWeightedPool8020(mockToken0, mockToken1);
 
-        // Deploy, register, and initialize a COCSwap pool with an exit fee hook
-        deployCOCSwapPool(mockToken0, mockToken1, mockToken2, mockToken3, mockToken4, mockToken5);
+        // Deploy, register, and initialize a COCSwap pool
+        address[] tokens = new address[4]();
+        tokens[0] = mockToken0;
+        tokens[1] = mockToken1;
+        tokens[2] = mockToken2;
+        tokens[3] = mockToken3;
+
+        uint256[] weights = new uint256[4]();
+        weights[0] = 25e16;
+        weights[1] = 25e16;
+        weights[2] = 25e16;
+        weights[3] = 25e16;
+
+        deployCOCSwapPool(tokens, weights);
     }
 
     modifier scaffoldExport() {
