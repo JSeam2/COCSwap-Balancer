@@ -90,6 +90,7 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
     uint256 public pool
     IHalo2Verifier public verifier;
     IOdosRouter public odosRouter;
+    address public odosExecutor;
 
 
     // current weights, note that we reduced this from 8 to 6
@@ -100,18 +101,8 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
     uint256 public normalizedWeight4;
     uint256 public normalizedWeight5;
 
-    // pending weights
-    uint256 public pendingWeight0;
-    uint256 public pendingWeight1;
-    uint256 public pendingWeight2;
-    uint256 public pendingWeight3;
-    uint256 public pendingWeight4;
-    uint256 public pendingWeight5;
-
     // time in seconds, delay till next rebalance
-    uint64 public rebalanceDelay;
-    // time in seconds, short cooldown (1min) after each rebalance to prevent sniping
-    uint64 public cooldown;
+    uint64 public rebalanceTimelock;
     // time in seconds, timestamp where rebalance happened
     uint64 public lastRebalanceTime;
 
@@ -168,16 +159,15 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
      * @notice Initialize the hooks contract
      * @dev This function is called instead of a constructor since the pool will be deployed via factory
      * @param _pool The pool address this hooks contract is associated with
-     * @param _zkVerifier The Halo2 verifier contract
+     * @param _verifier The Halo2 verifier contract
      * @param _odosRouter The Odos router for executing swaps
-     * @param _oracleDataProvider The oracle data provider address
      * @param _rebalanceTimelock Minimum time between rebalances
      */
     function initialize(
         address _pool,
         address _verifier,
         address _odosRouter,
-        address _oracleDataProvider,
+        address _odosExecutor,
         uint256 _rebalanceTimelock
     ) external {
         require(pool == address(0), "Already initialized");
@@ -186,7 +176,7 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
         pool = _pool;
         verifier = IHalo2Verifier(_verifier);
         odosRouter = IOdosRouter(_odosRouter);
-        oracleDataProvider = _oracleDataProvider;
+        odosExecutor = _odosExecutor;
         rebalanceTimelock = _rebalanceTimelock;
         lastRebalanceTime = block.timestamp;
 
@@ -321,6 +311,9 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
      * @param instances The instances used in the Zero Knowledge Proof
      */
     function updateWeights(bytes calldata proof, uint256[] calldata instances) external {
+        // TODO: We need a way to prove the data used here somehow
+        // TODO: to decide if this should be protected???
+        // Chainlink only offers a single data slice which isn't sufficient for our models
         InputHelpers.ensureInputLengthMatch(totalTokens, params.normalizedWeights.length);
 
         for (uint8 i = 0; i < _totalTokens; ++i) {
@@ -345,18 +338,123 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken {
         // Assign pending weights with verified values
         for (uint8 i = 0; i < _totalTokens; ++i) {
             // prettier-ignore
-            if (i == 0) { pendingWeight0 = normalizedWeights[i]; }
-            else if (i == 1) { pendingWeight1 = normalizedWeights[i]; }
-            else if (i == 2) { pendingWeight2 = normalizedWeights[i]; }
-            else if (i == 3) { pendingWeight3 = normalizedWeights[i]; }
-            else if (i == 4) { pendingWeight4 = normalizedWeights[i]; }
-            else if (i == 5) { pendingWeight5 = normalizedWeights[i]; }
+            if (i == 0) { normalizedWeight0 = normalizedWeights[i]; }
+            else if (i == 1) { normalizedWeight1 = normalizedWeights[i]; }
+            else if (i == 2) { normalizedWeight2 = normalizedWeights[i]; }
+            else if (i == 3) { normalizedWeight3 = normalizedWeights[i]; }
+            else if (i == 4) { normalizedWeight4 = normalizedWeights[i]; }
+            else if (i == 5) { normalizedWeight5 = normalizedWeights[i]; }
         }
 
         if (!verifier.verifyProof(proof, instances)) {
             revert VerificationFail();
         };
 
+    }
+
+    /**
+     * @notice The rebalance is done in 2 stages. rebalance is the second stage. This is reliant on an swap router like odos.
+     * note that we will experience alpha decay once the pool has more money as slippage will increase.
+     * @param pathDefinition the odos router path definition obtained from Odos API
+     */
+    function rebalance(bytes memory pathDefinition) external {
+        // Get current balances and calculate total value
+        uint256[] memory currentBalances = new uint256[](_totalTokens);
+        uint256[] memory targetBalances = new uint256[](_totalTokens);
+        address[] memory tokenAddresses = new address[](_totalTokens);
+        uint256 totalValue = 0;
+
+        // Get current balances and token addresses
+        for (uint8 i = 0; i < _totalTokens; ++i) {
+            tokenAddresses[i] = tokens[i];
+            currentBalances[i] = IERC20(tokens[i]).balanceOf(address(this));
+            totalValue += currentBalances[i] * getTokenPrice(tokens[i]);
+        }
+
+        // Calculate target balances based on normalized weights
+        uint256[] memory normalizedWeights = new uint256[](_totalTokens);
+        for (uint8 i = 0; i < _totalTokens; ++i) {
+            if (i == 0) { normalizedWeights[i] = normalizedWeight0; }
+            else if (i == 1) { normalizedWeights[i] = normalizedWeight1; }
+            else if (i == 2) { normalizedWeights[i] = normalizedWeight2; }
+            else if (i == 3) { normalizedWeights[i] = normalizedWeight3; }
+            else if (i == 4) { normalizedWeights[i] = normalizedWeight4; }
+            else if (i == 5) { normalizedWeights[i] = normalizedWeight5; }
+
+            // Calculate target balance based on weight
+            targetBalances[i] = (totalValue * normalizedWeights[i]) / FixedPoint.ONE;
+            // TODO get token price from chainlink
+            targetBalances[i] = targetBalances[i] / getTokenPrice(tokens[i]);
+        }
+
+        // Determine which tokens to sell (input) and which to buy (output)
+        IOdosRouter.inputTokenInfo[] memory inputs = new IOdosRouter.inputTokenInfo[](0);
+        IOdosRouter.outputTokenInfo[] memory outputs = new IOdosRouter.outputTokenInfo[](0);
+
+        // First, count how many inputs and outputs we'll have
+        uint256 inputCount = 0;
+        uint256 outputCount = 0;
+
+        for (uint8 i = 0; i < _totalTokens; ++i) {
+            if (currentBalances[i] > targetBalances[i]) {
+                inputCount++;
+            } else if (currentBalances[i] < targetBalances[i]) {
+                outputCount++;
+            }
+        }
+
+        // Then, create the arrays with the correct size
+        inputs = new IOdosRouter.inputTokenInfo[](inputCount);
+        outputs = new IOdosRouter.outputTokenInfo[](outputCount);
+
+        // Fill the input and output arrays
+        uint256 inputIndex = 0;
+        uint256 outputIndex = 0;
+
+        for (uint8 i = 0; i < _totalTokens; ++i) {
+            if (currentBalances[i] > targetBalances[i]) {
+                // We need to sell some of this token
+                uint256 amountToSell = currentBalances[i] - targetBalances[i];
+                inputs[inputIndex] = IOdosRouter.inputTokenInfo({
+                    tokenAddress: tokens[i],
+                    amountIn: amountToSell,
+                    receiver: address(this)
+                });
+                ++inputIndex
+            } else if (currentBalances[i] < targetBalances[i]) {
+                // We need to buy some of this token
+                // For relative value, use the difference in value terms
+                uint256 valueNeeded = (targetBalances[i] - currentBalances[i]) * getTokenPrice(tokens[i]);
+                outputs[outputIndex] = IOdosRouter.outputTokenInfo({
+                    tokenAddress: tokens[i],
+                    relativeValue: valueNeeded,
+                    receiver: address(this)
+                });
+                ++outputIndex
+            }
+        }
+
+        // Skip if no rebalancing needed
+        if (inputs.length == 0 || outputs.length == 0) {
+            return;
+        }
+
+        // Approve the router to spend our tokens
+        for (uint256 i = 0; i < inputs.length; i++) {
+            IERC20(inputs[i].tokenAddress).approve(address(odosRouter), inputs[i].amountIn);
+        }
+
+        // Execute the swap
+        odosRouter.swapMulti(
+            inputs,
+            outputs,
+            0, // We're setting minimum value out to 0 to ensure the transaction doesn't revert
+            pathDefinition,
+            odosExecutor,
+            0 // No referral code
+        );
+
+        emit Rebalanced();
     }
 
     //The minimum swap fee percentage for a pool

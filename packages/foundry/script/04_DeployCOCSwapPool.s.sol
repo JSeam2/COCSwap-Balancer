@@ -15,7 +15,7 @@ import { IVault } from "@balancer-labs/v3-interfaces/contracts/vault/IVault.sol"
 import { PoolHelpers, CustomPoolConfig, InitializationConfig } from "./PoolHelpers.sol";
 import { ScaffoldHelpers, console } from "./ScaffoldHelpers.sol";
 import { COCSwapFactory } from "../contracts/factories/COCSwapFactory.sol";
-import { ExitFeeHookExample } from "../contracts/hooks/ExitFeeHookExample.sol";
+import { ExitFeeHookSafe } from "../contracts/hooks/ExitFeeHookSafe.sol";
 
 /**
  * @title Deploy COCSwap Pool
@@ -27,15 +27,11 @@ import { ExitFeeHookExample } from "../contracts/hooks/ExitFeeHookExample.sol";
  */
 contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
     function deployCOCSwapPool(
-        address token0,
-        address token1,
-        address token2,
-        address token3,
-        address token4,
-        address token5,
+        address[6] calldata tokens,
+        uint256[6] calldata weights
     ) internal {
         // Set the deployment configurations
-        InitializationConfig memory initConfig = getWeightedPoolInitConfig(token1, token2);
+        InitializationConfig memory initConfig = getWeightedPoolInitConfig(tokens, weights);
 
         // Start creating the transactions
         uint256 deployerPrivateKey = getDeployerPrivateKey();
@@ -46,8 +42,8 @@ contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
         console.log("Constant Product Factory deployed at: %s", address(factory));
 
         // Deploy a hook
-        address exitFeeHook = address(new ExitFeeHookExample(vault, address(router)));
-        console.log("ExitFeeHookExample deployed at address: %s", exitFeeHook);
+        address exitFeeHook = address(new ExitFeeHookSafe(vault, address(router)));
+        console.log("ExitFeeHookSafe deployed at address: %s", exitFeeHook);
 
         // Deploy a pool and register it with the vault
         address pool = factory.create(
@@ -102,23 +98,48 @@ contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
 
         TokenConfig[] memory tokenConfigs = new TokenConfig[](2); // An array of descriptors for the tokens the pool will manage
         tokenConfigs[0] = TokenConfig({ // Make sure to have proper token order (alphanumeric)
-            token: IERC20(token1),
+            token: IERC20(token0),
             tokenType: TokenType.STANDARD, // STANDARD or WITH_RATE
             rateProvider: IRateProvider(address(0)), // The rate provider for a token (see further documentation above)
             paysYieldFees: false // Flag indicating whether yield fees should be charged on this token
         });
         tokenConfigs[1] = TokenConfig({ // Make sure to have proper token order (alphanumeric)
+            token: IERC20(token1),
+            tokenType: TokenType.STANDARD, // STANDARD or WITH_RATE
+            rateProvider: IRateProvider(address(0)), // The rate provider for a token (see further documentation above)
+            paysYieldFees: false // Flag indicating whether yield fees should be charged on this token
+        });
+        tokenConfigs[2] = TokenConfig({ // Make sure to have proper token order (alphanumeric)
             token: IERC20(token2),
+            tokenType: TokenType.STANDARD, // STANDARD or WITH_RATE
+            rateProvider: IRateProvider(address(0)), // The rate provider for a token (see further documentation above)
+            paysYieldFees: false // Flag indicating whether yield fees should be charged on this token
+        });
+        tokenConfigs[3] = TokenConfig({ // Make sure to have proper token order (alphanumeric)
+            token: IERC20(token3),
+            tokenType: TokenType.STANDARD, // STANDARD or WITH_RATE
+            rateProvider: IRateProvider(address(0)), // The rate provider for a token (see further documentation above)
+            paysYieldFees: false // Flag indicating whether yield fees should be charged on this token
+        });
+        tokenConfigs[4] = TokenConfig({ // Make sure to have proper token order (alphanumeric)
+            token: IERC20(token4),
+            tokenType: TokenType.STANDARD, // STANDARD or WITH_RATE
+            rateProvider: IRateProvider(address(0)), // The rate provider for a token (see further documentation above)
+            paysYieldFees: false // Flag indicating whether yield fees should be charged on this token
+        });
+        tokenConfigs[5] = TokenConfig({ // Make sure to have proper token order (alphanumeric)
+            token: IERC20(token5),
             tokenType: TokenType.STANDARD, // STANDARD or WITH_RATE
             rateProvider: IRateProvider(address(0)), // The rate provider for a token (see further documentation above)
             paysYieldFees: false // Flag indicating whether yield fees should be charged on this token
         });
 
         PoolRoleAccounts memory roleAccounts = PoolRoleAccounts({
-            pauseManager: address(0), // Account empowered to pause/unpause the pool (or 0 to delegate to governance)
-            swapFeeManager: address(0), // Account empowered to set static swap fees for a pool (or 0 to delegate to goverance)
-            poolCreator: address(0) // Account empowered to set the pool creator fee percentage
+            pauseManager: msg.sender, // Account empowered to pause/unpause the pool (or 0 to delegate to governance)
+            swapFeeManager: msg.sender, // Account empowered to set static swap fees for a pool (or 0 to delegate to goverance)
+            poolCreator: msg.sender // Account empowered to set the pool creator fee percentage
         });
+
         LiquidityManagement memory liquidityManagement = LiquidityManagement({
             disableUnbalancedLiquidity: true, // set to true to make the pool weights stable
             enableAddLiquidityCustom: false,
@@ -139,22 +160,29 @@ contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
         });
     }
 
-    /**
-     * @dev Set the pool initialization configurations here
-     * @notice This is where the amounts of tokens to Seed the pool with initial liquidity using Router as entrypoint are set
-     */
-    function getProductPoolInitConfig(
-        address token1,
-        address token2
+    /// @dev Set the initialization config for the pool (i.e. the amount of tokens to be added)
+    function getWeightedPoolInitConfig(
+        address[6] calldata tokens,
+        uint256[6] calldata weights,
     ) internal pure returns (InitializationConfig memory config) {
-        IERC20[] memory tokens = new IERC20[](2); // Array of tokens to be used in the pool
-        tokens[0] = IERC20(token1);
-        tokens[1] = IERC20(token2);
-        uint256[] memory exactAmountsIn = new uint256[](2); // Exact amounts of tokens to be added, sorted in token alphanumeric order
-        exactAmountsIn[0] = 50e18; // amount of token1 to send during pool initialization
-        exactAmountsIn[1] = 50e18; // amount of token2 to send during pool initialization
+        IERC20[] memory initTokens = new IERC20[](6); // Array of tokens to be used in the pool
+        initTokens[0] = IERC20(tokens[0]);
+        initTokens[1] = IERC20(tokens[1]);
+        initTokens[1] = IERC20(tokens[2]);
+        initTokens[1] = IERC20(tokens[3]);
+        initTokens[1] = IERC20(tokens[4]);
+        initTokens[1] = IERC20(tokens[5]);
+
+        uint256[] memory exactAmountsIn = new uint256[](6); // Exact amounts of tokens to be added, sorted in token alphanumeric order
+        exactAmountsIn[0] = weights[0];
+        exactAmountsIn[1] = weights[1];
+        exactAmountsIn[2] = weights[2];
+        exactAmountsIn[3] = weights[3];
+        exactAmountsIn[4] = weights[4];
+        exactAmountsIn[5] = weights[5];
+
         uint256 minBptAmountOut = 49e18; // Minimum amount of pool tokens to be received
-        bool wethIsEth = false; // If true, incoming ETH will be wrapped to WETH; otherwise the Vault will pull WETH tokens
+        bool wethIsEth = true; // If true, incoming ETH will be wrapped to WETH; otherwise the Vault will pull WETH tokens
         bytes memory userData = bytes(""); // Additional (optional) data required for adding initial liquidity
 
         config = InitializationConfig({
