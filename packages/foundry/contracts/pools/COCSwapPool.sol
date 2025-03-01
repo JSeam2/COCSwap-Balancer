@@ -71,12 +71,12 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
     struct COCSwapPoolParams {
         string name;
         string symbol;
-        uint8 totalTokens;
+        uint256 totalTokens;
         uint256[] weights;
-        address _verifier;
-        address _odosRouter;
-        address _odosExecutor;
-        uint256 _rebalanceTimelock;
+        address verifier;
+        address odosRouter;
+        address odosExecutor;
+        uint256 rebalanceTimelock;
     }
 
     // constants
@@ -90,18 +90,18 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
     uint256 internal constant _MIN_WEIGHT = 1e16; // 1%
 
     // initialization
-    uint8 public immutable totalTokens;
+    uint256 public immutable totalTokens;
     IHalo2Verifier public immutable verifier;
     IOdosRouter public immutable odosRouter;
     address public immutable odosExecutor;
 
     // current weights
-    mapping (uint8 => uint256) public normalizedWeights;
+    mapping (uint256 => uint256) public normalizedWeights;
 
     // time in seconds, delay till next rebalance
-    uint64 public rebalanceTimelock;
+    uint256 public rebalanceTimelock;
     // time in seconds, timestamp where rebalance happened
-    uint64 public lastRebalanceTime;
+    uint256 public lastRebalanceTime;
 
 
 
@@ -130,7 +130,7 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
     constructor(
         IVault vault,
         COCSwapPoolParams memory params
-    ) BalancerPoolToken(vault, params.name, params.symbol) {
+    ) BalancerPoolToken(vault, params.name, params.symbol) PoolInfo(vault) {
         totalTokens = params.totalTokens;
         _normalizeWeights(params.weights);
 
@@ -187,7 +187,7 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
             ? WeightedMath.computeInvariantUp
             : WeightedMath.computeInvariantDown;
 
-        return _upOrDown(normalizedWeights(), balancesLiveScaled18);
+        return _upOrDown(getNormalizedWeights(), balancesLiveScaled18);
     }
 
     /**
@@ -246,7 +246,7 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
      * @notice pass an array of weights this doesn't need to sum to one.
      * This routine gets the % weight given total sum. In the event of out of ranges it clips values.
      */
-    function _normalizeWeights(uint256[] calldata weights) internal {
+    function _normalizeWeights(uint256[] memory weights) internal {
         uint256 normalizedSum = 0;
         uint256 totalSum = 0;
         uint256 appliedSum = 0;
@@ -296,6 +296,12 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
             }
         }
 
+    }
+
+    // Mock rebalance
+    function rebalance(bytes memory pathDefinition) public returns (bool) {
+        // TODO
+        return true;
     }
 
     // /**

@@ -31,7 +31,7 @@ contract DeployScript is
             address mockToken3,
             address mockToken4,
             address mockToken5,
-            address mockVeBAL,
+            address mockVeBAL
         ) = deployMockTokens();
 
         // Deploy, register, and initialize a constant sum pool with a swap fee discount hook
@@ -44,19 +44,19 @@ contract DeployScript is
         deployWeightedPool8020(mockToken0, mockToken1);
 
         // Deploy, register, and initialize a COCSwap pool
-        address[] tokens = new address[4]();
-        tokens[0] = mockToken0;
-        tokens[1] = mockToken1;
-        tokens[2] = mockToken2;
-        tokens[3] = mockToken3;
+        address[4] memory tokensFixed;
+        tokensFixed[0] = mockToken0;
+        tokensFixed[1] = mockToken1;
+        tokensFixed[2] = mockToken2;
+        tokensFixed[3] = mockToken3;
 
-        uint256[] weights = new uint256[4]();
-        weights[0] = 25e16;
-        weights[1] = 25e16;
-        weights[2] = 25e16;
-        weights[3] = 25e16;
+        uint256[4] memory weightsFixed;
+        weightsFixed[0] = 25e16;
+        weightsFixed[1] = 25e16;
+        weightsFixed[2] = 25e16;
+        weightsFixed[3] = 25e16;
 
-        deployCOCSwapPool(tokens, weights);
+        deployCOCSwapPool(tokensFixed, weightsFixed);
     }
 
     modifier scaffoldExport() {

@@ -9,8 +9,7 @@ export const useFactoryHistory = () => {
   const [sumPools, setSumPools] = useState<Address[]>([]);
   const [productPools, setProductPools] = useState<Address[]>([]);
   const [weightedPools, setWeightedPools] = useState<Address[]>([]);
-  // TODO
-  // const [cocswapPools, setCocswapPools] = useState<Address[]>([]);
+  const [cocswapPools, setCocswapPools] = useState<Address[]>([]);
 
   useScaffoldEventSubscriber({
     contractName: "ConstantSumFactory",
@@ -51,19 +50,18 @@ export const useFactoryHistory = () => {
     },
   });
 
-  // TODO
-  // useScaffoldEventSubscriber({
-  //   contractName: "CocswapPoolFactory",
-  //   eventName: "PoolCreated",
-  //   listener: logs => {
-  //     logs.forEach(log => {
-  //       const { pool } = log.args;
-  //       if (pool) {
-  //         setWeightedPools(pools => [...pools, pool]);
-  //       }
-  //     });
-  //   },
-  // });
+  useScaffoldEventSubscriber({
+    contractName: "COCSwapFactory",
+    eventName: "PoolCreated",
+    listener: logs => {
+      logs.forEach(log => {
+        const { pool } = log.args;
+        if (pool) {
+          setCocswapPools(pools => [...pools, pool]);
+        }
+      });
+    },
+  });
 
   // Fetches the history of pools deployed via factory
   const { data: sumPoolHistory, isLoading: isLoadingSumPoolHistory } = useScaffoldEventHistory({
@@ -80,6 +78,12 @@ export const useFactoryHistory = () => {
 
   const { data: weightedPoolHistory, isLoading: isLoadingWeightedPoolHistory } = useScaffoldEventHistory({
     contractName: "WeightedPoolFactory",
+    eventName: "PoolCreated",
+    fromBlock: FROM_BLOCK_NUMBER,
+  });
+
+  const { data: cocswapPoolHistory, isLoading: isLoadingCocswapPoolHistory } = useScaffoldEventHistory({
+    contractName: "COCSwapFactory",
     eventName: "PoolCreated",
     fromBlock: FROM_BLOCK_NUMBER,
   });
@@ -129,9 +133,11 @@ export const useFactoryHistory = () => {
         !isLoadingSumPoolHistory &&
         !isLoadingProductPoolHistory &&
         !isLoadingWeightedPoolHistory &&
+        !isLoadingCocswapPoolHistory &&
         sumPoolHistory &&
         productPoolHistory &&
-        weightedPoolHistory
+        weightedPoolHistory &&
+        cocswapPoolHistory
       ) {
         const sumPools = sumPoolHistory
           .map(({ args }) => {
@@ -151,9 +157,16 @@ export const useFactoryHistory = () => {
           })
           .filter((pool): pool is Address => typeof pool === "string");
 
+        const cocswapPools = cocswapPoolHistory
+          .map(({ args }) => {
+            if (args.pool && isAddress(args.pool)) return args.pool;
+          })
+          .filter((pool): pool is Address => typeof pool === "string");
+
         setProductPools(productPools);
         setSumPools(sumPools);
         setWeightedPools(weightedPools);
+        setCocswapPools(cocswapPools);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -161,11 +174,13 @@ export const useFactoryHistory = () => {
       sumPoolHistory,
       productPoolHistory,
       weightedPoolHistory,
+      cocswapPoolHistory,
       isLoadingSumPoolHistory,
       isLoadingProductPoolHistory,
       isLoadingWeightedPoolHistory,
+      isLoadingCocswapPoolHistory,
     ],
   );
 
-  return { sumPools, productPools, weightedPools };
+  return { sumPools, productPools, weightedPools, cocswapPools };
 };

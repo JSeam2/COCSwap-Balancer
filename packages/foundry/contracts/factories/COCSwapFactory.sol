@@ -49,10 +49,32 @@ contract COCSwapFactory is BasePoolFactory {
         bool protocolFeeExempt,
         PoolRoleAccounts memory roleAccounts,
         address poolHooksContract,
-        LiquidityManagement memory liquidityManagement
+        LiquidityManagement memory liquidityManagement,
+        uint256[] memory weights,
+        address verifier,
+        address odosRouter,
+        address odosExecutor,
+        uint256 rebalanceTimelock
     ) external returns (address pool) {
         // First deploy a new pool
-        pool = _create(abi.encode(getVault(), name, symbol), salt);
+        COCSwapPool.COCSwapPoolParams memory poolParams = COCSwapPool.COCSwapPoolParams({
+            name: name,
+            symbol: symbol,
+            totalTokens: tokens.length,
+            weights: weights,
+            verifier: verifier,
+            odosRouter: odosRouter,
+            odosExecutor: odosExecutor,
+            rebalanceTimelock: rebalanceTimelock
+        });
+
+        pool = _create(
+            abi.encode(
+                getVault(),
+                poolParams
+            ),
+            salt
+        );
         // Then register the pool
         _registerPoolWithVault(
             pool,

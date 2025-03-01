@@ -13,20 +13,13 @@ type PoolSelectorProps = {
 export const PoolSelector = ({ setSelectedPoolAddress, selectedPoolAddress }: PoolSelectorProps) => {
   const [inputValue, setInputValue] = useState<string>("");
 
-  const {
-    sumPools,
-    productPools,
-    weightedPools,
-    // TODO
-    // cocswapPools
-  } = useFactoryHistory();
+  const { sumPools, productPools, weightedPools, cocswapPools } = useFactoryHistory();
 
   const poolTypes = [
     { label: "Constant Sum", addresses: sumPools },
     { label: "Constant Product", addresses: productPools },
     { label: "Weighted", addresses: weightedPools },
-    // TODO
-    // { label: "COCSwap", addresses: cocswapPools }
+    { label: "COCSwap", addresses: cocswapPools },
   ];
 
   return (

@@ -27,8 +27,8 @@ import { ExitFeeHookSafe } from "../contracts/hooks/ExitFeeHookSafe.sol";
  */
 contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
     function deployCOCSwapPool(
-        address[4] calldata tokens,
-        uint256[4] calldata weights
+        address[4] memory tokens,
+        uint256[4] memory weights
     ) internal {
         // Set the deployment configurations
         WeightedPoolConfig memory poolConfig = getCOCSwapPoolConfig(tokens, weights);
@@ -42,6 +42,14 @@ contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
         COCSwapFactory factory = new COCSwapFactory(vault, 365 days); //pauseWindowDuration
         console.log("COCSwap Factory deployed at: %s", address(factory));
 
+        // Create LiquidityManagement struct separately to avoid stack too deep errors
+        LiquidityManagement memory liquidityManagement = LiquidityManagement({
+            disableUnbalancedLiquidity: poolConfig.disableUnbalancedLiquidity,
+            enableAddLiquidityCustom: false,
+            enableRemoveLiquidityCustom: false,
+            enableDonation: poolConfig.enableDonation
+        });
+
         // Deploy a pool and register it with the vault
         address pool = factory.create(
             poolConfig.name,
@@ -52,12 +60,12 @@ contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
             false, // protocolFeeExempt
             poolConfig.roleAccounts,
             poolConfig.poolHooksContract, // poolHooksContract
-            LiquidityManagement({
-                disableUnbalancedLiquidity: poolConfig.disableUnbalancedLiquidity,
-                enableAddLiquidityCustom: false,
-                enableRemoveLiquidityCustom: false,
-                enableDonation: poolConfig.enableDonation
-            })
+            liquidityManagement,
+            poolConfig.normalizedWeights,
+            address(0), // verifier
+            address(0), // odosRouter
+            address(0), // odosExecutor
+            1 days // rebalanceTimelock
         );
         console.log("COCSwapPool deployed at: %s", pool);
 
@@ -84,8 +92,8 @@ contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
      * All WITH_RATE tokens need a rate provider, and may or may not be yield-bearing.
      */
     function getCOCSwapPoolConfig(
-        address[4] calldata tokens,
-        uint256[4] calldata weights
+        address[4] memory tokens,
+        uint256[4] memory weights
     ) internal view returns (WeightedPoolConfig memory config) {
         string memory name = "COCSwap Pool"; // name for the pool
         string memory symbol = "COC"; // symbol for the BPT
@@ -149,22 +157,37 @@ contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
 
     /// @dev Set the initialization config for the pool (i.e. the amount of tokens to be added)
     function getCOCSwapPoolInitConfig(
-        address[4] calldata tokens,
-        uint256[4] calldata weights
+        address[4] memory tokens,
+        uint256[4] memory weights
     ) internal pure returns (InitializationConfig memory config) {
+        // Create a temporary storage for sorting
+        address[4] memory sortedTokens = tokens;
+        uint256[4] memory sortedAmounts = weights;
+        
+        // Sort tokens in alphanumeric order along with their amounts
+        for (uint256 i = 0; i < 3; i++) {
+            for (uint256 j = 0; j < 3 - i; j++) {
+                if (sortedTokens[j] > sortedTokens[j + 1]) {
+                    // Swap tokens
+                    (sortedTokens[j], sortedTokens[j + 1]) = (sortedTokens[j + 1], sortedTokens[j]);
+                    // Swap corresponding amounts
+                    (sortedAmounts[j], sortedAmounts[j + 1]) = (sortedAmounts[j + 1], sortedAmounts[j]);
+                }
+            }
+        }
+        
+        // Convert to the expected format
         IERC20[] memory initTokens = new IERC20[](4); // Array of tokens to be used in the pool
-        initTokens[0] = IERC20(tokens[0]);
-        initTokens[1] = IERC20(tokens[1]);
-        initTokens[2] = IERC20(tokens[2]);
-        initTokens[3] = IERC20(tokens[3]);
-
         uint256[] memory exactAmountsIn = new uint256[](4); // Exact amounts of tokens to be added, sorted in token alphanumeric order
-        exactAmountsIn[0] = weights[0];
-        exactAmountsIn[1] = weights[1];
-        exactAmountsIn[2] = weights[2];
-        exactAmountsIn[3] = weights[3];
+        
+        for (uint256 i = 0; i < 4; i++) {
+            initTokens[i] = IERC20(sortedTokens[i]);
+            // Use an actual token amount instead of just using the weight as the amount
+            exactAmountsIn[i] = 1e18; // Using 1 token of each type
+        }
 
-        uint256 minBptAmountOut = 49e18; // Minimum amount of pool tokens to be received
+        // Setting a slightly lower minBptAmountOut to account for rounding during invariant calculation
+        uint256 minBptAmountOut = 9.99e17; // 0.999 ETH - slightly lower than expected amount
         bool wethIsEth = true; // If true, incoming ETH will be wrapped to WETH; otherwise the Vault will pull WETH tokens
         bytes memory userData = bytes(""); // Additional (optional) data required for adding initial liquidity
 

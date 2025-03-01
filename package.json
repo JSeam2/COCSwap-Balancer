@@ -31,7 +31,8 @@
     "postinstall": "husky install && forge install --root packages/foundry",
     "precommit": "lint-staged",
     "vercel": "vercel",
-    "vercel:yolo": "vercel --build-env NEXT_PUBLIC_IGNORE_BUILD_ERROR=true"
+    "vercel:yolo": "vercel --build-env NEXT_PUBLIC_IGNORE_BUILD_ERROR=true",
+    "updateWeights": "yarn workspace @se-2/foundry updateWeights"
   },
   "packageManager": "yarn@3.2.3",
   "devDependencies": {
