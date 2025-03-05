@@ -4,10 +4,15 @@ import { useQuery } from "@tanstack/react-query";
 import { SwapConfig, useTargetFork } from "~~/hooks/balancer";
 import { formatToHuman } from "~~/utils";
 
-export const useQuerySwap = (swapInput: SwapInput, setSwapConfig: Dispatch<SetStateAction<SwapConfig>>) => {
+export const useQuerySwap = (swapInput: SwapInput | null, setSwapConfig: Dispatch<SetStateAction<SwapConfig>>) => {
   const { rpcUrl } = useTargetFork();
 
   const querySwap = async () => {
+    // If swapInput is null, throw an error
+    if (!swapInput) {
+      throw new Error("Cannot query swap with null input");
+    }
+
     const swap = new Swap(swapInput);
     const queryOutput = await swap.query(rpcUrl);
 
@@ -40,7 +45,7 @@ export const useQuerySwap = (swapInput: SwapInput, setSwapConfig: Dispatch<SetSt
   };
 
   return useQuery({
-    queryKey: ["querySwap", swapInput.swapKind],
+    queryKey: ["querySwap", swapInput?.swapKind],
     queryFn: querySwap,
     enabled: false,
   });

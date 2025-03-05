@@ -39,26 +39,31 @@ export const SwapForm: React.FC<PoolActionsProps> = ({ pool, refetchPool, tokenB
   const { chainId } = useTargetFork();
   const queryClient = useQueryClient();
 
-  const tokenIn = pool.poolTokens[swapConfig.tokenIn.poolTokensIndex];
-  const tokenOut = pool.poolTokens[swapConfig.tokenOut.poolTokensIndex];
+  // Make sure pool.poolTokens is an array and has the necessary elements
+  const tokenIn = pool.poolTokens?.[swapConfig.tokenIn.poolTokensIndex];
+  const tokenOut = pool.poolTokens?.[swapConfig.tokenOut.poolTokensIndex];
 
-  const swapInput: SwapInput = {
-    chainId,
-    swapKind: swapConfig.swapKind,
-    paths: [
-      {
-        pools: [pool.address as `0x${string}`],
-        tokens: [
-          { address: tokenIn.address as `0x${string}`, decimals: tokenIn.decimals }, // tokenIn
-          { address: tokenOut.address as `0x${string}`, decimals: tokenOut.decimals }, // tokenOut
-        ],
-        protocolVersion: 3 as const,
-        inputAmountRaw: swapConfig.tokenIn.rawAmount,
-        outputAmountRaw: swapConfig.tokenOut.rawAmount,
-      },
-    ],
-    userData: swapConfig.userData,
-  };
+  // Only create swapInput if both tokenIn and tokenOut are available
+  const swapInput: SwapInput | null =
+    tokenIn && tokenOut
+      ? {
+          chainId,
+          swapKind: swapConfig.swapKind,
+          paths: [
+            {
+              pools: [pool.address as `0x${string}`],
+              tokens: [
+                { address: tokenIn.address as `0x${string}`, decimals: tokenIn.decimals }, // tokenIn
+                { address: tokenOut.address as `0x${string}`, decimals: tokenOut.decimals }, // tokenOut
+              ],
+              protocolVersion: 3 as const,
+              inputAmountRaw: swapConfig.tokenIn.rawAmount,
+              outputAmountRaw: swapConfig.tokenOut.rawAmount,
+            },
+          ],
+          userData: swapConfig.userData,
+        }
+      : null;
 
   const {
     data: queryResponse,
@@ -66,15 +71,18 @@ export const SwapForm: React.FC<PoolActionsProps> = ({ pool, refetchPool, tokenB
     error: queryError,
     refetch: refetchQuerySwap,
   } = useQuerySwap(swapInput, setSwapConfig);
+
   const { data: allowanceOnToken, refetch: refetchAllowanceOnToken } = useAllowanceOnToken(
-    tokenIn.address,
+    tokenIn?.address,
     PERMIT2[chainId],
   );
+
   const {
     mutateAsync: approveOnToken,
     isPending: isApprovePending,
     error: approveError,
-  } = useApproveOnToken(tokenIn.address, PERMIT2[chainId]);
+  } = useApproveOnToken(tokenIn?.address, PERMIT2[chainId]);
+
   const { mutate: swap, isPending: isSwapPending, error: swapError } = useSwap(swapInput);
 
   const handleQuerySwap = async () => {
@@ -89,30 +97,53 @@ export const SwapForm: React.FC<PoolActionsProps> = ({ pool, refetchPool, tokenB
   };
 
   const handleSwap = async () => {
-    swap(queryResponse, {
-      onSuccess: () => {
-        refetchPool();
-        refetchTokenBalances();
-      },
-    });
+    try {
+      swap(queryResponse, {
+        onSuccess: () => {
+          refetchPool();
+          refetchTokenBalances();
+        },
+        onError: error => {
+          // Special case for invariant ratio errors
+          if (
+            typeof error === "object" &&
+            error &&
+            "message" in error &&
+            typeof error.message === "string" &&
+            (error.message.includes("0x340a4533") || error.message.includes("invariant"))
+          ) {
+            console.error("Invariant ratio error detected. Trying with a smaller amount might help.");
+          }
+
+          // We let the error handler in the component display the error
+          console.error("Swap error:", error);
+        },
+      });
+    } catch (error) {
+      console.error("Error during swap:", error);
+    }
   };
 
   const handleTokenAmountChange = (amount: string, swapConfigKey: "tokenIn" | "tokenOut") => {
     // Clear previous results when the amount changes
     queryClient.removeQueries({ queryKey: ["querySwap"] });
     setSwapReceipt(null);
+
+    // Ensure tokens are available before calculating rawAmount
+    if (!tokenIn || !tokenOut) return;
+
     // Update the focused input amount with new value and reset the other input amount
     setSwapConfig(prevConfig => ({
       ...prevConfig,
       tokenIn: {
         ...prevConfig.tokenIn,
         amount: swapConfigKey === "tokenIn" ? amount : "",
-        rawAmount: swapConfigKey === "tokenIn" ? parseUnits(amount, tokenIn.decimals) : 0n,
+        rawAmount: swapConfigKey === "tokenIn" && amount ? parseUnits(amount || "0", tokenIn.decimals) : 0n,
       },
       tokenOut: {
         ...prevConfig.tokenOut,
         amount: swapConfigKey === "tokenOut" ? amount : "",
-        rawAmount: swapConfigKey === "tokenOut" ? parseUnits(amount, tokenOut.decimals) : 0n,
+        rawAmount: swapConfigKey === "tokenOut" && amount ? parseUnits(amount || "0", tokenOut.decimals) : 0n,
       },
       swapKind: swapConfigKey === "tokenIn" ? SwapKind.GivenIn : SwapKind.GivenOut,
     }));
@@ -129,11 +160,15 @@ export const SwapForm: React.FC<PoolActionsProps> = ({ pool, refetchPool, tokenB
     }));
   };
 
+  // Only register the event if tokens are defined
   useContractEvent({
     address: VAULT_V3[chainId],
     abi: vaultV3Abi,
     eventName: "Swap",
     listener(log: any[]) {
+      // Only process the event if tokens are defined
+      if (!tokenIn || !tokenOut) return;
+
       const data = [
         {
           decimals: tokenOut.decimals,
@@ -159,6 +194,15 @@ export const SwapForm: React.FC<PoolActionsProps> = ({ pool, refetchPool, tokenB
 
   const isFormEmpty = swapConfig.tokenIn.amount === "" && swapConfig.tokenOut.amount === "";
   const error: Error | null = queryError || swapError || approveError;
+
+  // Early return if tokens are not available
+  if (!tokenIn || !tokenOut) {
+    return (
+      <section className="flex flex-col gap-5">
+        <Alert type="warning">Pool tokens not available. Please select a valid pool.</Alert>
+      </section>
+    );
+  }
 
   return (
     <section className="flex flex-col gap-5">
@@ -199,7 +243,13 @@ export const SwapForm: React.FC<PoolActionsProps> = ({ pool, refetchPool, tokenB
         <TransactionButton label="Swap" isDisabled={isSwapPending} onClick={handleSwap} />
       )}
 
-      {error && <Alert type="error">{error.message} / </Alert>}
+      {error && (
+        <Alert type="error">
+          {error.message.includes("0x340a4533")
+            ? "The swap amount is too large for this pool. Try a smaller amount to avoid exceeding the pool's invariant ratio limits."
+            : error.message}
+        </Alert>
+      )}
 
       {queryResponse && (
         <ResultsDisplay

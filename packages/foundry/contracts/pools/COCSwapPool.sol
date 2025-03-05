@@ -20,46 +20,6 @@ import { IHalo2Verifier } from "./IHalo2Verifier.sol";
 
 
 /**
- * @title IOdosRouter
- * @notice Interface for interacting with Odos router for token swaps
- * Deployments at https://github.com/odos-xyz/odos-router-v2/blob/main/README.md#chain-deployments
- */
-interface IOdosRouter {
-    /// @dev Contains all information needed to describe an intput token for swapMulti
-    struct inputTokenInfo {
-        address tokenAddress;
-        uint256 amountIn;
-        address receiver;
-    }
-    /// @dev Contains all information needed to describe an output token for swapMulti
-    struct outputTokenInfo {
-        address tokenAddress;
-        uint256 relativeValue;
-        address receiver;
-    }
-
-    /// @notice Externally facing interface for swapping between two sets of tokens
-    /// @param inputs list of input token structs for the path being executed
-    /// @param outputs list of output token structs for the path being executed
-    /// @param valueOutMin minimum amount of value out the user will accept
-    /// @param pathDefinition Encoded path definition for executor
-    /// @param executor Address of contract that will execute the path
-    /// @param referralCode referral code to specify the source of the swap
-    function swapMulti(
-        inputTokenInfo[] memory inputs,
-        outputTokenInfo[] memory outputs,
-        uint256 valueOutMin,
-        bytes calldata pathDefinition,
-        address executor,
-        uint32 referralCode
-    )
-        external
-        payable
-        returns (uint256[] memory amountsOut);
-}
-
-
-/**
  * @title COCSwap Pool
  * @notice COCSwap pool is a custom pool which actively rebalances its vault using convex optimization.
  * The rebalancing is made verifiable using EZKL Halo2Verifier.
@@ -227,7 +187,8 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
 
 
     /**
-     * @notice The rebalance is done in 2 stages. updateWeights is needed for the first step. This is reliant on the ezkl circuit
+     * @notice We are rebalancing in 2 stages. Step 1, we call updateWeights to update poolWeights.
+     * Once this is updated, there will be a mispricing which arbitrageurs can exploit.
      * @param proof The Zero Knowledge Proof bytestring
      * @param instances The instances used in the Zero Knowledge Proof
      */
@@ -297,117 +258,6 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
         }
 
     }
-
-    // Mock rebalance
-    function rebalance(bytes memory pathDefinition) public returns (bool) {
-        // TODO
-        return true;
-    }
-
-    // /**
-    //  * @notice The rebalance is done in 2 stages. rebalance is the second stage. This is reliant on an swap router like odos.
-    //  * note that we will experience alpha decay once the pool has more money as slippage will increase.
-    //  * @param pathDefinition the odos router path definition obtained from Odos API
-    //  */
-    // function rebalance(bytes memory pathDefinition) external {
-    //     // Get current balances and calculate total value
-    //     uint256[] memory currentBalances = new uint256[](_totalTokens);
-    //     uint256[] memory targetBalances = new uint256[](_totalTokens);
-    //     address[] memory tokenAddresses = new address[](_totalTokens);
-    //     uint256 totalValue = 0;
-
-    //     // Get current balances and token addresses
-    //     for (uint8 i = 0; i < _totalTokens; ++i) {
-    //         tokenAddresses[i] = tokens[i];
-    //         currentBalances[i] = IERC20(tokens[i]).balanceOf(address(this));
-    //         totalValue += currentBalances[i] * getTokenPrice(tokens[i]);
-    //     }
-
-    //     // Calculate target balances based on normalized weights
-    //     uint256[] memory normalizedWeights = new uint256[](_totalTokens);
-    //     for (uint8 i = 0; i < _totalTokens; ++i) {
-    //         if (i == 0) { normalizedWeights[i] = normalizedWeight0; }
-    //         else if (i == 1) { normalizedWeights[i] = normalizedWeight1; }
-    //         else if (i == 2) { normalizedWeights[i] = normalizedWeight2; }
-    //         else if (i == 3) { normalizedWeights[i] = normalizedWeight3; }
-    //         else if (i == 4) { normalizedWeights[i] = normalizedWeight4; }
-    //         else if (i == 5) { normalizedWeights[i] = normalizedWeight5; }
-
-    //         // Calculate target balance based on weight
-    //         targetBalances[i] = (totalValue * normalizedWeights[i]) / FixedPoint.ONE;
-    //         // TODO get token price from chainlink
-    //         targetBalances[i] = targetBalances[i] / getTokenPrice(tokens[i]);
-    //     }
-
-    //     // Determine which tokens to sell (input) and which to buy (output)
-    //     IOdosRouter.inputTokenInfo[] memory inputs = new IOdosRouter.inputTokenInfo[](0);
-    //     IOdosRouter.outputTokenInfo[] memory outputs = new IOdosRouter.outputTokenInfo[](0);
-
-    //     // First, count how many inputs and outputs we'll have
-    //     uint256 inputCount = 0;
-    //     uint256 outputCount = 0;
-
-    //     for (uint8 i = 0; i < _totalTokens; ++i) {
-    //         if (currentBalances[i] > targetBalances[i]) {
-    //             inputCount++;
-    //         } else if (currentBalances[i] < targetBalances[i]) {
-    //             outputCount++;
-    //         }
-    //     }
-
-    //     // Then, create the arrays with the correct size
-    //     inputs = new IOdosRouter.inputTokenInfo[](inputCount);
-    //     outputs = new IOdosRouter.outputTokenInfo[](outputCount);
-
-    //     // Fill the input and output arrays
-    //     uint256 inputIndex = 0;
-    //     uint256 outputIndex = 0;
-
-    //     for (uint8 i = 0; i < _totalTokens; ++i) {
-    //         if (currentBalances[i] > targetBalances[i]) {
-    //             // We need to sell some of this token
-    //             uint256 amountToSell = currentBalances[i] - targetBalances[i];
-    //             inputs[inputIndex] = IOdosRouter.inputTokenInfo({
-    //                 tokenAddress: tokens[i],
-    //                 amountIn: amountToSell,
-    //                 receiver: address(this)
-    //             });
-    //             ++inputIndex;
-    //         } else if (currentBalances[i] < targetBalances[i]) {
-    //             // We need to buy some of this token
-    //             // For relative value, use the difference in value terms
-    //             uint256 valueNeeded = (targetBalances[i] - currentBalances[i]) * getTokenPrice(tokens[i]);
-    //             outputs[outputIndex] = IOdosRouter.outputTokenInfo({
-    //                 tokenAddress: tokens[i],
-    //                 relativeValue: valueNeeded,
-    //                 receiver: address(this)
-    //             });
-    //             ++outputIndex;
-    //         }
-    //     }
-
-    //     // Skip if no rebalancing needed
-    //     if (inputs.length == 0 || outputs.length == 0) {
-    //         return;
-    //     }
-
-    //     // Approve the router to spend our tokens
-    //     for (uint256 i = 0; i < inputs.length; i++) {
-    //         IERC20(inputs[i].tokenAddress).approve(address(odosRouter), inputs[i].amountIn);
-    //     }
-
-    //     // Execute the swap
-    //     odosRouter.swapMulti(
-    //         inputs,
-    //         outputs,
-    //         0, // We're setting minimum value out to 0 to ensure the transaction doesn't revert
-    //         pathDefinition,
-    //         odosExecutor,
-    //         0 // No referral code
-    //     );
-
-    //     emit Rebalanced();
-    // }
 
     //The minimum swap fee percentage for a pool
     function getMinimumSwapFeePercentage() external pure returns (uint256) {
