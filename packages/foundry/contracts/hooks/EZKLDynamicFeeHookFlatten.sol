@@ -3929,7 +3929,7 @@ contract EZKLDynamicFeeHook is BaseHooks, VaultGuard {
     /**
      * @notice Update fee percentage
      */
-    function updateFee(bytes calldata proof, uint256 dynamicFee) external {
+    function updateFee(bytes calldata proof, uint256 dynamicFeeUnscaled) external {
         // construct instances we take lookback + 1 to append dynamic fee into the instances
         uint256[] memory instances = new uint256[](_lookback + 1);
 
@@ -3941,10 +3941,10 @@ contract EZKLDynamicFeeHook is BaseHooks, VaultGuard {
         for (uint256 i = 0; i < historicalLength; ++i) {
             instances[i] = historical[i];
         }
-        instances[_lookback] = dynamicFee;
+        instances[_lookback] = dynamicFeeUnscaled;
 
         if (_verifier.verifyProof(proof, instances)) {
-            _dynamicFee = dynamicFee;
+            _dynamicFee = (dynamicFeeUnscaled * 1e18) / (_scalingFactor * 1e18);
 
             emit EZKLDynamicFeeHookUpdated(
                 address(this),
