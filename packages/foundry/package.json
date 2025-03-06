@@ -13,7 +13,8 @@
     "lint": "npx prettier --check --plugin=prettier-plugin-solidity 'contracts/**/*.sol' 'test/**/*.sol' && prettier --check ./script/**/*.js",
     "test": "forge test",
     "verify": "forge build --build-info --build-info-path out/build-info/ && forge script script/VerifyAll.s.sol --ffi --rpc-url ${1:-default_network}",
-    "updateWeights": "node scripts-js/updateWeights.js"
+    "updateWeights": "node scripts-js/updateWeights.js",
+    "getRoundIds": "node scripts-js/getRoundIds.js"
   },
   "dependencies": {
     "dotenv": "~16.3.1",
