@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: MIT
+//SPDX-License-Identifier: AGPL-3
 pragma solidity ^0.8.24;
 
 import { BalancerPoolToken } from "@balancer-labs/v3-vault/contracts/BalancerPoolToken.sol";
@@ -187,15 +187,14 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
 
 
     /**
-     * @notice We are rebalancing in 2 stages. Step 1, we call updateWeights to update poolWeights.
-     * Once this is updated, there will be a mispricing which arbitrageurs can exploit.
+     * @notice We are rebalancing in 2 stages.
+     * Step 1, we call updateWeights to update poolWeights.
+     * Step 2, Once this is updated, there will be a mispricing which arbitrageurs can exploit.
      * @param proof The Zero Knowledge Proof bytestring
      * @param instances The instances used in the Zero Knowledge Proof
      */
-    function updateWeights(bytes calldata proof, uint256[] calldata instances) public {
+    function updateWeights(bytes calldata proof, uint256[] calldata instances) public onlyOwner {
         // Chainlink only offers a single data slice which isn't sufficient for our models
-        // TODO: We need a way to prove the data used here somehow
-        // TODO: to decide if this should be protected???
         if (!verifier.verifyProof(proof, instances)) {
             revert VerificationFail();
         }
