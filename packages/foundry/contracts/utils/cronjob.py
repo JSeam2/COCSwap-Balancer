@@ -161,10 +161,10 @@ class ContractUpdater:
 
             # Sign the transaction
             signed_tx = self.w3.eth.account.sign_transaction(tx, self.private_key)
-            logger.info(f"Transaction signed. Hash: {self.w3.to_hex(self.w3.keccak(signed_tx.rawTransaction))}")
+            logger.info(f"Transaction signed. Hash: {self.w3.to_hex(self.w3.keccak(signed_tx.raw_transaction))}")
 
             # Send the transaction
-            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
             logger.info(f"Update transaction sent: {tx_hash.hex()}")
             
             # Wait for transaction receipt
