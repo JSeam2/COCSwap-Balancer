@@ -56,7 +56,7 @@ contract DeployScript is
         weightsFixed[2] = 25e16;
         weightsFixed[3] = 25e16;
 
-        deployCOCSwapPool(tokensFixed, weightsFixed);
+        deployCOCSwapPool(tokensFixed, weightsFixed, address(this));
     }
 
     modifier scaffoldExport() {

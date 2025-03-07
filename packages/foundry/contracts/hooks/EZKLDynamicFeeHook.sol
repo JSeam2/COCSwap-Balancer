@@ -50,8 +50,9 @@ contract EZKLDynamicFeeHook is BaseHooks, VaultGuard {
 
     error VerificationFail();
 
-    constructor(IVault vault, address verifier, uint256 scalingFactor, uint256 lookback) VaultGuard(vault) {
+    constructor(IVault vault, address verifier, address priceCache, uint256 scalingFactor, uint256 lookback) VaultGuard(vault) {
         _verifier = IHalo2Verifier(verifier);
+        _priceCache = IChainlinkPriceCache(priceCache);
         _scalingFactor = scalingFactor;
         _lookback = lookback;
 

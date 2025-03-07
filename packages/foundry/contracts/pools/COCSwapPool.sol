@@ -17,6 +17,7 @@ import {
 } from "@balancer-labs/v3-interfaces/contracts/pool-weighted/IWeightedPool.sol";
 import { PoolInfo } from "@balancer-labs/v3-pool-utils/contracts/PoolInfo.sol";
 import { IHalo2Verifier } from "./IHalo2Verifier.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 
 /**
@@ -25,7 +26,7 @@ import { IHalo2Verifier } from "./IHalo2Verifier.sol";
  * The rebalancing is made verifiable using EZKL Halo2Verifier.
  * https://blog.ezkl.xyz/post/cocswap/
  */
-contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
+contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo, Ownable {
     using FixedPoint for uint256;
 
     struct COCSwapPoolParams {
@@ -34,9 +35,6 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
         uint256 totalTokens;
         uint256[] weights;
         address verifier;
-        address odosRouter;
-        address odosExecutor;
-        uint256 rebalanceTimelock;
     }
 
     // constants
@@ -52,18 +50,10 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
     // initialization
     uint256 public immutable totalTokens;
     IHalo2Verifier public immutable verifier;
-    IOdosRouter public immutable odosRouter;
     address public immutable odosExecutor;
 
     // current weights
     mapping (uint256 => uint256) public normalizedWeights;
-
-    // time in seconds, delay till next rebalance
-    uint256 public rebalanceTimelock;
-    // time in seconds, timestamp where rebalance happened
-    uint256 public lastRebalanceTime;
-
-
 
     /**
      * @notice `getRate` from `IRateProvider` was called on a Weighted Pool.
@@ -89,16 +79,13 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
     /// @notice remember to initialize the weights by running the optimization algo
     constructor(
         IVault vault,
+        address owner,
         COCSwapPoolParams memory params
-    ) BalancerPoolToken(vault, params.name, params.symbol) PoolInfo(vault) {
+    ) BalancerPoolToken(vault, params.name, params.symbol) PoolInfo(vault) Ownable(owner) {
         totalTokens = params.totalTokens;
         _normalizeWeights(params.weights);
 
         verifier = IHalo2Verifier(params.verifier);
-        odosRouter = IOdosRouter(params.odosRouter);
-        odosExecutor = params.odosExecutor;
-        rebalanceTimelock = params.rebalanceTimelock;
-        lastRebalanceTime = block.timestamp;
 
     }
 
@@ -190,6 +177,7 @@ contract COCSwapPool is IWeightedPool, BalancerPoolToken, PoolInfo {
      * @notice We are rebalancing in 2 stages.
      * Step 1, we call updateWeights to update poolWeights.
      * Step 2, Once this is updated, there will be a mispricing which arbitrageurs can exploit.
+     * Note that currently this flow is centralized. A future solution will involve oracles providing KZGCommitments
      * @param proof The Zero Knowledge Proof bytestring
      * @param instances The instances used in the Zero Knowledge Proof
      */

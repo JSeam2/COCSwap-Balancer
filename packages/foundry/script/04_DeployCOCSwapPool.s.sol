@@ -28,7 +28,8 @@ import { ExitFeeHookSafe } from "../contracts/hooks/ExitFeeHookSafe.sol";
 contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
     function deployCOCSwapPool(
         address[4] memory tokens,
-        uint256[4] memory weights
+        uint256[4] memory weights,
+        address owner
     ) internal {
         // Set the deployment configurations
         WeightedPoolConfig memory poolConfig = getCOCSwapPoolConfig(tokens, weights);
@@ -63,9 +64,7 @@ contract DeployCOCSwapPool is PoolHelpers, ScaffoldHelpers {
             liquidityManagement,
             poolConfig.normalizedWeights,
             address(0), // verifier
-            address(0), // odosRouter
-            address(0), // odosExecutor
-            1 days // rebalanceTimelock
+            owner
         );
         console.log("COCSwapPool deployed at: %s", pool);
 
