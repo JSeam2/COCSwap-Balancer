@@ -2671,8 +2671,6 @@ interface IProtocolFeeController {
      */
     function withdrawPoolCreatorFees(address pool) external;
 }
-
-
 // lib/balancer-v3-monorepo/pkg/interfaces/contracts/vault/IVaultAdmin.sol
 
 /**
@@ -3854,6 +3852,7 @@ contract VaultGuard {
     }
 }
 
+
 // lib/balancer-v3-monorepo/pkg/interfaces/contracts/vault/IVault.sol
 
 /// @notice Composite interface for all Vault operations: swap, add/remove liquidity, and associated queries.
@@ -3861,6 +3860,7 @@ interface IVault is IVaultMain, IVaultExtension, IVaultAdmin, IVaultErrors, IVau
     /// @return vault The main Vault address.
     function vault() external view override(IVaultAdmin, IVaultExtension) returns (IVault);
 }
+
 
 // contracts/hooks/EZKLDynamicFeeHook.sol
 
@@ -3956,3 +3956,4 @@ contract EZKLDynamicFeeHook is BaseHooks, VaultGuard {
         }
     }
 }
+

@@ -42,7 +42,7 @@ contract EZKLDynamicFeeHookTest is BaseVaultTest {
 
     // EZKL hook configuration
     uint256 internal _scalingFactor = 1;
-    uint256 internal _lookback = 10;
+    uint256 internal _lookback = 336;
 
     IHalo2Verifier public verifier;
     IChainlinkPriceCache public priceCache;

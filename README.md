@@ -2,7 +2,34 @@
 
 COCSwap example on Balancer v3. [More details on COCSwap found on this blog post.](https://blog.ezkl.xyz/post/cocswap/)
 
+COCSwap is a suite of tools to help LPs make more money by allowing the use of verifiable ZKML strategies in their pools.
+
 ![image](./img.jpg)
+
+## Dynamic Fee Demo
+
+## 🐔 COCSwap Features
+1. Relies on [ezkl](https://github.com/zkonduit/ezkl) for verifiable offchain compute and inference. ZKML allow proprietary models to remain private. People can get the performance of the model by backtesting the ZKML models. Currently, EZKL helps update contract hyperparams in an async way.
+
+2. Customizable Dynamic Fee Hook (EZKLDynamicFeeHook)
+
+3. Dynamically Weighted Pool (COCSwapPool)
+
+4. Boosted Pools if eligible via Balancer
+
+5. (TODO) Hijacking user data field to modify add/remove liquidity and swaps.
+
+## Contract Deployment
+
+### ETH/USD Dynamic Fee Hook
+- [ChainlinkPriceCache](https://basescan.org/address/0x74F1e0C70B9C40CaEc42Bb098D125197FB4E7213)
+- [Halo2Verifier](https://basescan.org/address/0xDDF6066413B53De449A1C54c30028aF2f9eD8Ef1)
+- [DynFeeHookPool](https://balancer.fi/pools/base/v3/0x77f9cf2145053250d1DF56173cd0fC28a12784ee)
+
+### COCSwapPools
+- TBD
+
+## Contract Deployments
 
 ## ✨ Features
 
