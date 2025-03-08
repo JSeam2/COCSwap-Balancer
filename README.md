@@ -7,6 +7,7 @@ COCSwap is a suite of tools to help LPs make more money by allowing the use of v
 ![image](./img.jpg)
 
 ## Dynamic Fee Demo
+[Youtube Video](https://youtu.be/RHvnQFJXk0U)
 
 ## 🐔 COCSwap Features
 1. Relies on [ezkl](https://github.com/zkonduit/ezkl) for verifiable offchain compute and inference. ZKML allow proprietary models to remain private. People can get the performance of the model by backtesting the ZKML models. Currently, EZKL helps update contract hyperparams in an async way.
