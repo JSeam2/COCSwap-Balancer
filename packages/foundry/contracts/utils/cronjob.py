@@ -19,8 +19,8 @@ logging.basicConfig(
 logger = logging.getLogger("ContractUpdater")
 
 # Contract information
-CONTRACT_ADDRESS = secrets.CONTRACT_ADDRESS
-CONTRACT_ABI = json.loads('''
+CACHE_CONTRACT_ADDRESS = secrets.CACHE_CONTRACT_ADDRESS
+CACHE_CONTRACT_ABI = json.loads('''
 [{"inputs":[{"internalType":"string","name":"_description","type":"string"},{"internalType":"address","name":"_oracle","type":"address"},{"internalType":"uint256","name":"_delay","type":"uint256"},{"internalType":"uint256[]","name":"_roundIds","type":"uint256[]"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"InvalidRange","type":"error"},{"inputs":[],"name":"NoDataAvailable","type":"error"},{"inputs":[],"name":"WaitForDelay","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"timestamp","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"price","type":"uint256"}],"name":"Updated","type":"event"},{"inputs":[],"name":"delay","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"description","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"lookback","type":"uint256"}],"name":"getHistoricalPrice","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"start","type":"uint256"},{"internalType":"uint256","name":"end","type":"uint256"}],"name":"getHistoricalPriceRange","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"lookback","type":"uint256"}],"name":"getHistoricalTimestamp","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"start","type":"uint256"},{"internalType":"uint256","name":"end","type":"uint256"}],"name":"getHistoricalTimestampRange","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"latestSnapshotId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"oracle","outputs":[{"internalType":"contract IAggregatorInterface","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"prices","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"timestamps","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"update","outputs":[],"stateMutability":"nonpayable","type":"function"}]
 ''')
 
@@ -129,13 +129,18 @@ class ContractUpdater:
         # Return True if current time is at or past the next update time
         return current_time >= (self.next_update_time - UPDATE_WINDOW_BUFFER)
 
-    def call_update(self):
-        """Call the update function on the contract"""
+    def call_update(self, retry_count=0):
+        """Call the update function on the contract with gas price adjustments on retries"""
         try:
-            # Debug gas price
-            gas_price = self.w3.eth.gas_price
+            # Get base gas price
+            base_gas_price = self.w3.eth.gas_price
+            
+            # Apply gas price multiplier based on retry count (10% increase per retry)
+            multiplier = 1.0 + (retry_count * 0.2)  # 20% increase per retry
+            gas_price = int(base_gas_price * multiplier)
+            
             gas_price_gwei = self.w3.from_wei(gas_price, 'gwei')
-            logger.info(f"Current gas price: {gas_price_gwei} Gwei")
+            logger.info(f"Using gas price: {gas_price_gwei} Gwei (retry {retry_count}, multiplier {multiplier:.2f}x)")
 
             # Get the transaction count for nonce
             nonce = self.w3.eth.get_transaction_count(self.wallet_address)
@@ -146,7 +151,7 @@ class ContractUpdater:
             gas_limit = 130000  # Fixed gas limit that should be sufficient for most update calls
             logger.info(f"Using fixed gas limit: {gas_limit}")
 
-            # Build the transaction with fixed gas limit
+            # Build the transaction with fixed gas limit and adjusted gas price
             tx = self.contract.functions.update().build_transaction({
                 'from': self.wallet_address,
                 'nonce': nonce,
@@ -167,17 +172,21 @@ class ContractUpdater:
             tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
             logger.info(f"Update transaction sent: {tx_hash.hex()}")
             
-            # Wait for transaction receipt
-            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
-            logger.info(f"Transaction confirmed in block {receipt['blockNumber']}")
-            
-            # Check status of transaction
-            if receipt['status'] == 1:
-                logger.info(f"Transaction succeeded. Gas used: {receipt['gasUsed']}")
-                return True, None
-            else:
-                logger.error(f"Transaction failed. Gas used: {receipt['gasUsed']}")
-                return False, "Transaction failed"
+            # Wait for transaction receipt with a timeout
+            try:
+                receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+                logger.info(f"Transaction confirmed in block {receipt['blockNumber']}")
+                
+                # Check status of transaction
+                if receipt['status'] == 1:
+                    logger.info(f"Transaction succeeded. Gas used: {receipt['gasUsed']}")
+                    return True, None
+                else:
+                    logger.error(f"Transaction failed. Gas used: {receipt['gasUsed']}")
+                    return False, "Transaction failed"
+            except Exception as timeout_error:
+                logger.warning(f"Transaction may be pending: {str(timeout_error)}")
+                return False, "Timeout"
             
         except ContractLogicError as e:
             error_message = str(e)
@@ -205,9 +214,12 @@ class ContractUpdater:
         except Exception as e:
             error_message = str(e)
 
-            if "out of gas" in error_message.lower() or "underpriced" in error_message.lower():
+            if "out of gas" in error_message.lower():
                 logger.error(f"Out of gas error: {error_message}")
                 return False, "OutOfGas"
+            elif "underpriced" in error_message.lower():
+                logger.error(f"Replacement transaction underpriced: {error_message}")
+                return False, "Underpriced"
             elif "bad request" in error_message.lower():
                 logger.error(f"Bad Request error from node provider: {error_message}")
                 if DEBUG_MODE:
@@ -238,8 +250,8 @@ class ContractUpdater:
 
                     # Try to update until successful or max retries reached
                     while not update_successful and retries < MAX_RETRIES:
-                        # Call update function
-                        success, error = self.call_update()
+                        # Call update function with retry count
+                        success, error = self.call_update(retry_count=retries)
 
                         if success:
                             logger.info("Update successful!")
@@ -271,9 +283,15 @@ class ContractUpdater:
                                 print("CRITICAL: Your wallet needs to be topped up! Transaction failed due to insufficient gas.")
                                 print("Please add funds to your wallet address: " + self.wallet_address)
                                 print("!" * 80 + "\n")
-
-                                # End retries if we're out of gas
-                                break
+                                time.sleep(5)  # Short wait before retry with higher gas price
+                            elif error == "Underpriced":
+                                # For underpriced transactions, just retry with higher gas
+                                logger.warning("Transaction underpriced. Will retry with higher gas price.")
+                                time.sleep(5)  # Short wait before retry with higher gas price
+                            elif error == "Timeout":
+                                # If timeout occurred, retry with higher gas price
+                                logger.warning(f"Transaction timeout. Will retry with higher gas price. Retry {retries}/{MAX_RETRIES}")
+                                time.sleep(10)  # Short wait before retry
                             elif error == "InvalidRange" or error == "NoDataAvailable":
                                 # These are contract-specific errors that may require manual intervention
                                 logger.error(f"Contract error {error}. This may require manual intervention. Retry {retries}/{MAX_RETRIES}")
@@ -332,7 +350,7 @@ def main():
     
     try:
         # Check if the secrets file exists and has the required variables
-        required_vars = ['CONTRACT_ADDRESS', 'ETHEREUM_NODE_URL', 'WALLET_PRIVATE_KEY', 'WALLET_ADDRESS']
+        required_vars = ['CACHE_CONTRACT_ADDRESS', 'ETHEREUM_NODE_URL', 'WALLET_PRIVATE_KEY', 'WALLET_ADDRESS']
         missing_vars = []
 
         for var in required_vars:
@@ -345,8 +363,8 @@ def main():
 
         updater = ContractUpdater(
             ETHEREUM_NODE_URL,
-            CONTRACT_ADDRESS,
-            CONTRACT_ABI,
+            CACHE_CONTRACT_ADDRESS,
+            CACHE_CONTRACT_ABI,
             WALLET_ADDRESS,
             WALLET_PRIVATE_KEY
         )
