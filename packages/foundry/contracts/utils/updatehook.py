@@ -2,14 +2,14 @@
 import time
 import json
 import logging
-import datetime
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 import secrets
 import traceback
-import tempfile
 import requests
 import uuid
+
+DEBUG = True
 
 # Configure logging
 logging.basicConfig(
@@ -24,11 +24,12 @@ logger = logging.getLogger("HookUpdater")
 
 price_cache_abi = """[{"inputs":[{"internalType":"string","name":"_description","type":"string"},{"internalType":"address","name":"_oracle","type":"address"},{"internalType":"uint256","name":"_delay","type":"uint256"},{"internalType":"uint256[]","name":"_roundIds","type":"uint256[]"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"InvalidRange","type":"error"},{"inputs":[],"name":"NoDataAvailable","type":"error"},{"inputs":[],"name":"WaitForDelay","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"timestamp","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"price","type":"uint256"}],"name":"Updated","type":"event"},{"inputs":[],"name":"delay","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"description","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"lookback","type":"uint256"}],"name":"getHistoricalPrice","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"start","type":"uint256"},{"internalType":"uint256","name":"end","type":"uint256"}],"name":"getHistoricalPriceRange","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"lookback","type":"uint256"}],"name":"getHistoricalTimestamp","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"start","type":"uint256"},{"internalType":"uint256","name":"end","type":"uint256"}],"name":"getHistoricalTimestampRange","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"latestSnapshotId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"oracle","outputs":[{"internalType":"contract IAggregatorInterface","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"prices","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"timestamps","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"update","outputs":[],"stateMutability":"nonpayable","type":"function"}]"""
 dyn_fee_hook_abi = """[{"inputs":[{"internalType":"contract IVault","name":"vault","type":"address"},{"internalType":"address","name":"verifier","type":"address"},{"internalType":"address","name":"priceCache","type":"address"},{"internalType":"uint256","name":"scalingFactor","type":"uint256"},{"internalType":"uint256","name":"lookback","type":"uint256"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[{"internalType":"address","name":"sender","type":"address"}],"name":"SenderIsNotVault","type":"error"},{"inputs":[],"name":"VerificationFail","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"hooksContract","type":"address"},{"indexed":true,"internalType":"address","name":"pool","type":"address"}],"name":"EZKLDynamicFeeHookRegistered","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"hooksContract","type":"address"},{"indexed":false,"internalType":"uint256","name":"dynamicFee","type":"uint256"}],"name":"EZKLDynamicFeeHookUpdated","type":"event"},{"inputs":[],"name":"_dynamicFee","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"_lookback","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"_priceCache","outputs":[{"internalType":"contract IChainlinkPriceCache","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"_scalingFactor","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"_verifier","outputs":[{"internalType":"contract IHalo2Verifier","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getHookFlags","outputs":[{"components":[{"internalType":"bool","name":"enableHookAdjustedAmounts","type":"bool"},{"internalType":"bool","name":"shouldCallBeforeInitialize","type":"bool"},{"internalType":"bool","name":"shouldCallAfterInitialize","type":"bool"},{"internalType":"bool","name":"shouldCallComputeDynamicSwapFee","type":"bool"},{"internalType":"bool","name":"shouldCallBeforeSwap","type":"bool"},{"internalType":"bool","name":"shouldCallAfterSwap","type":"bool"},{"internalType":"bool","name":"shouldCallBeforeAddLiquidity","type":"bool"},{"internalType":"bool","name":"shouldCallAfterAddLiquidity","type":"bool"},{"internalType":"bool","name":"shouldCallBeforeRemoveLiquidity","type":"bool"},{"internalType":"bool","name":"shouldCallAfterRemoveLiquidity","type":"bool"}],"internalType":"struct HookFlags","name":"hookFlags","type":"tuple"}],"stateMutability":"pure","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"address","name":"","type":"address"},{"internalType":"enum AddLiquidityKind","name":"","type":"uint8"},{"internalType":"uint256[]","name":"","type":"uint256[]"},{"internalType":"uint256[]","name":"amountsInRaw","type":"uint256[]"},{"internalType":"uint256","name":"","type":"uint256"},{"internalType":"uint256[]","name":"","type":"uint256[]"},{"internalType":"bytes","name":"","type":"bytes"}],"name":"onAfterAddLiquidity","outputs":[{"internalType":"bool","name":"","type":"bool"},{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"},{"internalType":"uint256","name":"","type":"uint256"},{"internalType":"bytes","name":"","type":"bytes"}],"name":"onAfterInitialize","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"address","name":"","type":"address"},{"internalType":"enum RemoveLiquidityKind","name":"","type":"uint8"},{"internalType":"uint256","name":"","type":"uint256"},{"internalType":"uint256[]","name":"","type":"uint256[]"},{"internalType":"uint256[]","name":"amountsOutRaw","type":"uint256[]"},{"internalType":"uint256[]","name":"","type":"uint256[]"},{"internalType":"bytes","name":"","type":"bytes"}],"name":"onAfterRemoveLiquidity","outputs":[{"internalType":"bool","name":"","type":"bool"},{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"components":[{"internalType":"enum SwapKind","name":"kind","type":"uint8"},{"internalType":"contract IERC20","name":"tokenIn","type":"address"},{"internalType":"contract IERC20","name":"tokenOut","type":"address"},{"internalType":"uint256","name":"amountInScaled18","type":"uint256"},{"internalType":"uint256","name":"amountOutScaled18","type":"uint256"},{"internalType":"uint256","name":"tokenInBalanceScaled18","type":"uint256"},{"internalType":"uint256","name":"tokenOutBalanceScaled18","type":"uint256"},{"internalType":"uint256","name":"amountCalculatedScaled18","type":"uint256"},{"internalType":"uint256","name":"amountCalculatedRaw","type":"uint256"},{"internalType":"address","name":"router","type":"address"},{"internalType":"address","name":"pool","type":"address"},{"internalType":"bytes","name":"userData","type":"bytes"}],"internalType":"struct AfterSwapParams","name":"","type":"tuple"}],"name":"onAfterSwap","outputs":[{"internalType":"bool","name":"","type":"bool"},{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"address","name":"","type":"address"},{"internalType":"enum AddLiquidityKind","name":"","type":"uint8"},{"internalType":"uint256[]","name":"","type":"uint256[]"},{"internalType":"uint256","name":"","type":"uint256"},{"internalType":"uint256[]","name":"","type":"uint256[]"},{"internalType":"bytes","name":"","type":"bytes"}],"name":"onBeforeAddLiquidity","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"},{"internalType":"bytes","name":"","type":"bytes"}],"name":"onBeforeInitialize","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"address","name":"","type":"address"},{"internalType":"enum RemoveLiquidityKind","name":"","type":"uint8"},{"internalType":"uint256","name":"","type":"uint256"},{"internalType":"uint256[]","name":"","type":"uint256[]"},{"internalType":"uint256[]","name":"","type":"uint256[]"},{"internalType":"bytes","name":"","type":"bytes"}],"name":"onBeforeRemoveLiquidity","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"components":[{"internalType":"enum SwapKind","name":"kind","type":"uint8"},{"internalType":"uint256","name":"amountGivenScaled18","type":"uint256"},{"internalType":"uint256[]","name":"balancesScaled18","type":"uint256[]"},{"internalType":"uint256","name":"indexIn","type":"uint256"},{"internalType":"uint256","name":"indexOut","type":"uint256"},{"internalType":"address","name":"router","type":"address"},{"internalType":"bytes","name":"userData","type":"bytes"}],"internalType":"struct PoolSwapParams","name":"","type":"tuple"},{"internalType":"address","name":"","type":"address"}],"name":"onBeforeSwap","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"components":[{"internalType":"enum SwapKind","name":"kind","type":"uint8"},{"internalType":"uint256","name":"amountGivenScaled18","type":"uint256"},{"internalType":"uint256[]","name":"balancesScaled18","type":"uint256[]"},{"internalType":"uint256","name":"indexIn","type":"uint256"},{"internalType":"uint256","name":"indexOut","type":"uint256"},{"internalType":"address","name":"router","type":"address"},{"internalType":"bytes","name":"userData","type":"bytes"}],"internalType":"struct PoolSwapParams","name":"","type":"tuple"},{"internalType":"address","name":"","type":"address"},{"internalType":"uint256","name":"","type":"uint256"}],"name":"onComputeDynamicSwapFeePercentage","outputs":[{"internalType":"bool","name":"","type":"bool"},{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"address","name":"pool","type":"address"},{"components":[{"internalType":"contract IERC20","name":"token","type":"address"},{"internalType":"enum TokenType","name":"tokenType","type":"uint8"},{"internalType":"contract IRateProvider","name":"rateProvider","type":"address"},{"internalType":"bool","name":"paysYieldFees","type":"bool"}],"internalType":"struct TokenConfig[]","name":"","type":"tuple[]"},{"components":[{"internalType":"bool","name":"disableUnbalancedLiquidity","type":"bool"},{"internalType":"bool","name":"enableAddLiquidityCustom","type":"bool"},{"internalType":"bool","name":"enableRemoveLiquidityCustom","type":"bool"},{"internalType":"bool","name":"enableDonation","type":"bool"}],"internalType":"struct LiquidityManagement","name":"","type":"tuple"}],"name":"onRegister","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes","name":"proof","type":"bytes"},{"internalType":"uint256","name":"dynamicFeeUnscaled","type":"uint256"}],"name":"updateFee","outputs":[],"stateMutability":"nonpayable","type":"function"}]"""
+ezkl_verifier_abi = """[{"inputs":[{"internalType":"bytes","name":"proof","type":"bytes"},{"internalType":"uint256[]","name":"instances","type":"uint256[]"}],"name":"verifyProof","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}]"""
 
 WALLET_PRIVATE_KEY = secrets.WALLET_PRIVATE_KEY
 WALLET_ADDRESS = secrets.WALLET_ADDRESS
 
-def get_historical_prices(web3, price_cache_contract_address, lookback=10):
+def get_historical_prices(web3, price_cache_contract_address, lookback=10, length=336):
     """
     Fetch historical prices from the ChainlinkPriceCache contract
     
@@ -56,7 +57,24 @@ def get_historical_prices(web3, price_cache_contract_address, lookback=10):
         logger.info(f"prices = {historical_prices}")
         logger.info(f"timestamps = {historical_timestamps}")
 
-        return historical_prices
+        if DEBUG:
+            if len(historical_prices) <= length:
+                while len(historical_prices) <= length:
+                    historical_prices.append(historical_prices[-1])
+
+        # format into json
+        output_data = {
+            "input_data": [historical_prices],
+            "output_data": None
+        }
+
+        print(output_data)
+
+        if DEBUG:
+            with open("input_debug.json", "w") as f:
+                json.dump(output_data, f)
+
+        return output_data
             
     except ContractLogicError as e:
         logger.error(f"Contract logic error: {str(e)}")
@@ -70,16 +88,11 @@ def get_historical_prices(web3, price_cache_contract_address, lookback=10):
         return []
 
 
-def call_lilith(historical_prices, length=337):
+def call_lilith(output_data, length=337):
     """
     Calls lilith with the historical prices and returns proof, outputs
     """
     latest_uuid = str(uuid.uuid4())
-
-    if len(historical_prices) != length:
-        while len(historical_prices) != length:
-            historical_prices.append(historical_prices[-1])
-
 
     try:
         res = requests.post(
@@ -93,7 +106,7 @@ def call_lilith(historical_prices, length=337):
                     {
                         "artifact": "balancer_fee_model",
                         "binary": "ezkl",
-                        "deployment": "01957919-8fcc-76c8-a81b-386cf5b9bf20",
+                        "deployment": "0195a934-4d19-7b2d-bd08-5a15bd69fdf4",
                         "command": [
                             "gen-witness",
                             f"--data input_{latest_uuid}.json",
@@ -104,7 +117,7 @@ def call_lilith(historical_prices, length=337):
                     {
                         "artifact": "balancer_fee_model",
                         "binary": "ezkl",
-                        "deployment": "01957919-8fcc-76c8-a81b-386cf5b9bf20",
+                        "deployment": "0195a934-4d19-7b2d-bd08-5a15bd69fdf4",
                         "command": [
                             "prove",
                             f"--witness witness_{latest_uuid}.json",
@@ -117,7 +130,7 @@ def call_lilith(historical_prices, length=337):
                 ],
                 "data": [{
                     "target_path": f"input_{latest_uuid}.json",
-                    "data": {"input_data": [historical_prices]}
+                    "data": output_data
                 }],
             }
         )
@@ -192,7 +205,8 @@ def update_hook():
         account = w3.eth.account.from_key(WALLET_PRIVATE_KEY)
         
         # Get historical prices and generate proof
-        historical_prices = get_historical_prices(w3, secrets.CONTRACT_ADDRESS, 100)
+        historical_prices = get_historical_prices(w3, secrets.CONTRACT_ADDRESS, 312)
+
         if not historical_prices:
             logger.error("Failed to get historical prices. Cannot update hook.")
             return
@@ -204,6 +218,37 @@ def update_hook():
             return
             
         logger.info(f"Got proof and dynamicFeeUnscaled: {dynamicFeeUnscaled}")
+
+        # Call the ezkl verifier
+        if DEBUG:
+            verifier_contract = w3.eth.contract(
+                address=secrets.EZKL_VERIFIER_ADDRESS,
+                abi=ezkl_verifier_abi
+            )
+
+            transaction = verifier_contract.functions.verifyProof(
+                proof,
+                historical_prices['input_data'] + [int(dynamicFeeUnscaled, 16)]
+            ).build_transaction({
+                'from': WALLET_ADDRESS,
+                'nonce': w3.eth.get_transaction_count(WALLET_ADDRESS),
+                'gas': 2000000,
+                'gasPrice': w3.eth.gas_price,
+            })
+
+            # Sign and send transaction
+            signed_tx = w3.eth.account.sign_transaction(transaction, WALLET_PRIVATE_KEY)
+            tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+
+            logger.info(f"Transaction sent with hash: {tx_hash.hex()}")
+
+            # Wait for transaction receipt
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
+            if receipt.status == 1:
+                logger.info(f"Successfully updated dynamic fee on hook contract")
+            else:
+                logger.error(f"Transaction failed with status: {receipt.status}")
+
         
         # Create contract instance for the hook
         hook_contract = w3.eth.contract(
@@ -214,7 +259,7 @@ def update_hook():
         # Build transaction to call updateFee function
         transaction = hook_contract.functions.updateFee(
             proof,
-            int(dynamicFeeUnscaled)
+            historical_prices['input_data'] + [int(dynamicFeeUnscaled, 16)]
         ).build_transaction({
             'from': WALLET_ADDRESS,
             'nonce': w3.eth.get_transaction_count(WALLET_ADDRESS),
@@ -224,7 +269,7 @@ def update_hook():
         
         # Sign and send transaction
         signed_tx = w3.eth.account.sign_transaction(transaction, WALLET_PRIVATE_KEY)
-        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
         
         logger.info(f"Transaction sent with hash: {tx_hash.hex()}")
         
