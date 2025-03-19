@@ -9,7 +9,7 @@ import traceback
 import requests
 import uuid
 
-DEBUG = True
+DEBUG = False
 
 # Configure logging
 logging.basicConfig(
@@ -29,14 +29,14 @@ ezkl_verifier_abi = """[{"inputs":[{"internalType":"bytes","name":"proof","type"
 WALLET_PRIVATE_KEY = secrets.WALLET_PRIVATE_KEY
 WALLET_ADDRESS = secrets.WALLET_ADDRESS
 
-def get_historical_prices(web3, price_cache_contract_address, lookback=10, length=336):
+def get_historical_prices(web3, price_cache_contract_address, lookback=337, length=337):
     """
     Fetch historical prices from the ChainlinkPriceCache contract
     
     Args:
         web3: Web3 instance
         price_cache_contract_address: Address of the deployed ChainlinkPriceCache contract
-        lookback: Number of historical prices to retrieve (default: 10)
+        lookback: Number of historical prices to retrieve (default: 337)
         
     Returns:
         List of historical prices
@@ -58,8 +58,8 @@ def get_historical_prices(web3, price_cache_contract_address, lookback=10, lengt
         logger.info(f"timestamps = {historical_timestamps}")
 
         if DEBUG:
-            if len(historical_prices) <= length:
-                while len(historical_prices) <= length:
+            if len(historical_prices) < length:
+                while len(historical_prices) < length:
                     historical_prices.append(historical_prices[-1])
 
         # format into json
@@ -88,7 +88,7 @@ def get_historical_prices(web3, price_cache_contract_address, lookback=10, lengt
         return []
 
 
-def call_lilith(output_data, length=337):
+def call_lilith(output_data):
     """
     Calls lilith with the historical prices and returns proof, outputs
     """
@@ -205,7 +205,7 @@ def update_hook():
         account = w3.eth.account.from_key(WALLET_PRIVATE_KEY)
         
         # Get historical prices and generate proof
-        historical_prices = get_historical_prices(w3, secrets.CONTRACT_ADDRESS, 312)
+        historical_prices = get_historical_prices(w3, secrets.CONTRACT_ADDRESS, 337)
 
         if not historical_prices:
             logger.error("Failed to get historical prices. Cannot update hook.")
@@ -259,7 +259,7 @@ def update_hook():
         # Build transaction to call updateFee function
         transaction = hook_contract.functions.updateFee(
             proof,
-            historical_prices['input_data'] + [int(dynamicFeeUnscaled, 16)]
+            int(dynamicFeeUnscaled, 16)
         ).build_transaction({
             'from': WALLET_ADDRESS,
             'nonce': w3.eth.get_transaction_count(WALLET_ADDRESS),
