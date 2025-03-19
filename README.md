@@ -20,12 +20,20 @@ COCSwap is a suite of tools to help LPs make more money by allowing the use of v
 
 5. (TODO) Hijacking user data field to modify add/remove liquidity and swaps.
 
-## Contract Deployment
+## Base Contract Deployment
 
-### ETH/USD Dynamic Fee Hook
-- [ChainlinkPriceCache](https://basescan.org/address/0x74F1e0C70B9C40CaEc42Bb098D125197FB4E7213)
-- [Halo2Verifier](https://basescan.org/address/0xDDF6066413B53De449A1C54c30028aF2f9eD8Ef1)
-- [DynFeeHookPool](https://balancer.fi/pools/base/v3/0x77f9cf2145053250d1DF56173cd0fC28a12784ee)
+- [ChainlinkPriceCache](https://basescan.org/address/0x74F1e0C70B9C40CaEc42Bb098D125197FB4E7213) `0x74F1e0C70B9C40CaEc42Bb098D125197FB4E7213`
+
+### ETH/USD Dynamic Fee Pool via Admin
+**Note** After deploying the pool, register it with the FeeManager
+
+#### Pool 1
+- OLD ~~[Halo2Verifier](https://basescan.org/address/0x0E9F451ed95Bf889b340FF8a63263d642dE12042) `0x0E9F451ed95Bf889b340FF8a63263d642dE12042`~~
+- [Halo2Verifier](https://basescan.org/address/) `0x9200214D7dA239890f3d4c353d119B5ed6A1A136`
+- [FeeManager](https://basescan.org/address/0x4Bd930eAC99B23b8Cb7a83EEAdb06e3265b4Ca4f) `0x4Bd930eAC99B23b8Cb7a83EEAdb06e3265b4Ca4f`
+- [EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x08C16E2872807520b1DF569588A6B771B331cBAb) `0x08C16E2872807520b1DF569588A6B771B331cBAb`
+
+
 
 ### COCSwapPools
 - TBD

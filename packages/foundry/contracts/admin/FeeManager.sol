@@ -68,6 +68,7 @@ contract FeeManager is Ownable {
         uint256 _scalingFactor,
         uint256 _initDynamicFee
     ) public onlyOwner {
+        // NOTE: This allows the owner to override the pool
         // Setup the initial fee config
         feeConfig[pool] = FeeConfig({
             verifier: IHalo2Verifier(_verifier),
