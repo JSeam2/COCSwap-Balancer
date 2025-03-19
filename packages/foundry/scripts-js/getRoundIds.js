@@ -14,25 +14,37 @@ async function getRoundIds() {
   // Parse command line arguments
   const args = process.argv.slice(2);
   
-  if (args.length !== 4) {
+  if (args.length !== 5) {
     console.error("Get Round Ids to populate the ChainlinkCache contract");
-    console.error("Usage: node getRoundIds.js <oracle_address> <delay_seconds> <start_timestamp> <end_timestamp>");
-    console.error("Example: node getRoundIds 0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612 14400 1735718400 1741204800");
+    console.error("Usage: node getRoundIds.js <chain> <oracle_address> <delay_seconds> <start_timestamp> <end_timestamp>");
+    console.error("Example: node getRoundIds base 0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612 3600 1735718400 1741204800");
     process.exit(1);
   }
   
-  const oracleAddress = args[0];
-  const delaySeconds = parseInt(args[1]);
-  const startTimestamp = parseInt(args[2]);
-  const endTimestamp = parseInt(args[3]);
+  const chain = args[0].toLowerCase();
+  const oracleAddress = args[1];
+  const delaySeconds = parseInt(args[2]);
+  const startTimestamp = parseInt(args[3]);
+  const endTimestamp = parseInt(args[4]);
   
   // Connect to Ethereum node (using public providers)
   let provider;
   try {
     // Try provider in env
-    // provider = new ethers.providers.JsonRpcProvider(process.env.MAINNET_RPC_URL);
-    // provider = new ethers.providers.JsonRpcProvider(process.env.ARBITRUM_RPC_URL);
-    provider = new ethers.providers.JsonRpcProvider(process.env.BASE_RPC_URL);
+    if (chain == "base") {
+      provider = new ethers.providers.JsonRpcProvider(process.env.BASE_RPC_URL);
+    }
+    else if (chain == "arbitrum") {
+      provider = new ethers.providers.JsonRpcProvider(process.env.ARBITRUM_RPC_URL);
+    }
+    else if (chain == "mainnet") {
+      provider = new ethers.providers.JsonRpcProvider(process.env.MAINNET_RPC_URL);
+    } else if (chain == "sepolia") {
+      provider = new ethers.providers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
+    } else {
+      console.error("Chain not supported");
+      process.exit(1);
+    }
     await provider.getBlockNumber(); // Test connection
   } catch (error) {
     console.error("Failed to connect to Ethereum node:", error.message);
