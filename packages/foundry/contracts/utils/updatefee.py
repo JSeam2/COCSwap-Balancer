@@ -237,7 +237,7 @@ def update_fee():
         ).build_transaction({
             'from': WALLET_ADDRESS,
             'nonce': w3.eth.get_transaction_count(WALLET_ADDRESS),
-            'gas': 2000000,
+            'gas': 30000000,
             'gasPrice': w3.eth.gas_price + 10,
         })
 
