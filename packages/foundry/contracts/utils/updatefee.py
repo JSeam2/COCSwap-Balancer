@@ -232,7 +232,7 @@ def update_fee():
 
         transaction = fee_manager_contract.functions.setStaticSwapFeePercentage(
             secrets.POOL_CONTRACT_ADDRESS,
-            proof,
+            Web3.to_bytes(hexstr=proof),
             int(instances[-1], 16)
         ).build_transaction({
             'from': WALLET_ADDRESS,

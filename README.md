@@ -25,13 +25,31 @@ COCSwap is a suite of tools to help LPs make more money by allowing the use of v
 - [ChainlinkPriceCache](https://basescan.org/address/0x74F1e0C70B9C40CaEc42Bb098D125197FB4E7213) `0x74F1e0C70B9C40CaEc42Bb098D125197FB4E7213`
 
 ### ETH/USD Dynamic Fee Pool via Admin
-**Note** After deploying the pool, register it with the FeeManager
+**Note** After deploying the pool, register it with the FeeManager. Make sure to +1 in the lookback periods
 
 #### Pool 1
 - OLD ~~[Halo2Verifier](https://basescan.org/address/0x0E9F451ed95Bf889b340FF8a63263d642dE12042) `0x0E9F451ed95Bf889b340FF8a63263d642dE12042`~~
-- [Halo2Verifier](https://basescan.org/address/) `0x9200214D7dA239890f3d4c353d119B5ed6A1A136`
-- [FeeManager](https://basescan.org/address/0x4Bd930eAC99B23b8Cb7a83EEAdb06e3265b4Ca4f) `0x4Bd930eAC99B23b8Cb7a83EEAdb06e3265b4Ca4f`
-- [EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x08C16E2872807520b1DF569588A6B771B331cBAb) `0x08C16E2872807520b1DF569588A6B771B331cBAb`
+
+- [Halo2Verifier](https://basescan.org/address/0x9200214D7dA239890f3d4c353d119B5ed6A1A136) `0x9200214D7dA239890f3d4c353d119B5ed6A1A136`
+
+- OLD ~~[FeeManager](https://basescan.org/address/0x4Bd930eAC99B23b8Cb7a83EEAdb06e3265b4Ca4f) `0x4Bd930eAC99B23b8Cb7a83EEAdb06e3265b4Ca4f`~~
+
+- OLD ~~[FeeManager](https://basescan.org/address/0x25E273Fa0893FCf4F3Fb920e15c933715D078e7d) `0x25E273Fa0893FCf4F3Fb920e15c933715D078e7d`~~
+
+- OLD ~~[FeeManager](https://basescan.org/address/0xEFF3BB1f780D741446d6e376Afe1BD580FBc2F39) `0xEFF3BB1f780D741446d6e376Afe1BD580FBc2F39`~~
+
+- [FeeManager](https://basescan.org/address/0xB503410d20DF3d389d57D5513263e77e003f15aa) `0xB503410d20DF3d389d57D5513263e77e003f15aa`
+
+- OLD ~~[EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x08C16E2872807520b1DF569588A6B771B331cBAb) `0x08C16E2872807520b1DF569588A6B771B331cBAb`~~
+
+- OLD ~~[EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x7530820AfAe29C2fbA80ffF49F80E5bAA75dd986) `0x7530820AfAe29C2fbA80ffF49F80E5bAA75dd986`~~
+
+- OLD ~~[EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x5dF21B950adc28C56FF3483EcE3c2D559626d756) `0x5dF21B950adc28C56FF3483EcE3c2D559626d756`~~
+
+- OLD ~~[ETH Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x683F03C4B4201C1aB70715e38d79a2E49DB12488) `0x683F03C4B4201C1aB70715e38d79a2E49DB12488`~~
+
+
+- [ETH Boosteed ETH/USD Pool](https://balancer.fi/pools/base/v3/0xAa1C578C0D5901E1CE857bBcc6dF641FdCC2903a) `0xAa1C578C0D5901E1CE857bBcc6dF641FdCC2903a`
 
 
 

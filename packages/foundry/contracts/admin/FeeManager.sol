@@ -24,7 +24,8 @@ contract FeeManager is Ownable {
         IHalo2Verifier verifier;
         IChainlinkPriceCache priceCache;
         uint256 lookback;
-        uint256 scalingFactor;
+        uint256 scalingFactorDiv;
+        uint256 scalingFactorMul;
         uint256 dynamicFee;
     }
     
@@ -32,7 +33,7 @@ contract FeeManager is Ownable {
     mapping(address => FeeConfig) public feeConfig;
 
     // Events
-    event NewFeeConfig(address indexed pool, address verifier, address priceCache, uint256 lookback, uint256 scalingFactor, uint256 initialFee);
+    event NewFeeConfig(address indexed pool, address verifier, address priceCache, uint256 lookback, uint256 scalingFactorDiv, uint256 scalingFactorMul, uint256 initialFee);
     event FeeUpdated(address indexed pool, uint256 swapFeePercentage);
     
     // Errors
@@ -51,13 +52,15 @@ contract FeeManager is Ownable {
         vault = _vault;
     }
 
+
     /**
      * @notice Registers the initial fee configuration for a pool
      * @param pool The pool address
      * @param _verifier The Halo2 verifier contract for fee verification
      * @param _priceCache The price cache contract for historical price data
      * @param _lookback Number of historical price points to consider
-     * @param _scalingFactor Scaling factor for fee calculations
+     * @param _scalingFactorDiv Scaling factor for fee calculations
+     * @param _scalingFactorMul Scaling factor for fee calculations
      * @param _initDynamicFee Initial dynamic fee value
      */
     function registerFeeConfig(
@@ -65,7 +68,8 @@ contract FeeManager is Ownable {
         address _verifier,
         address _priceCache,
         uint256 _lookback,
-        uint256 _scalingFactor,
+        uint256 _scalingFactorDiv,
+        uint256 _scalingFactorMul,
         uint256 _initDynamicFee
     ) public onlyOwner {
         // NOTE: This allows the owner to override the pool
@@ -74,12 +78,14 @@ contract FeeManager is Ownable {
             verifier: IHalo2Verifier(_verifier),
             priceCache: IChainlinkPriceCache(_priceCache),
             lookback: _lookback,
-            scalingFactor: _scalingFactor,
+            scalingFactorDiv: _scalingFactorDiv,
+            scalingFactorMul: _scalingFactorMul,
             dynamicFee: _initDynamicFee
         });
 
-        emit NewFeeConfig(pool, _verifier, _priceCache, _lookback, _scalingFactor, _initDynamicFee);
+        emit NewFeeConfig(pool, _verifier, _priceCache, _lookback, _scalingFactorDiv, _scalingFactorMul, _initDynamicFee);
     }
+
 
     /**
      * @notice Updates the dynamic swap fee for a pool after verifying the calculation proof
@@ -99,26 +105,27 @@ contract FeeManager is Ownable {
         }
         
         // Calculate the scaled fee
-        uint256 scaledFee = dynamicFeeUnscaled * config.scalingFactor;
+        uint256 scaledFee = (dynamicFeeUnscaled * 1e18) / (config.scalingFactorDiv * 1e18) * config.scalingFactorMul;
         
-        // Construct instances: we take lookback + 1 to append dynamic fee into the instances
-        uint256[] memory instances = new uint256[](config.lookback + 1);
-
         // Get historical price
         uint256[] memory historical = config.priceCache.getHistoricalPrice(config.lookback);
 
         // Add historical to instances and append dynamicFee at the end
         uint256 historicalLength = historical.length;
+
+        // Construct instances: we take lookback + 1 to append dynamic fee into the instances
+        uint256[] memory instances = new uint256[](historicalLength + 1);
+
         for (uint256 i = 0; i < historicalLength; ++i) {
             instances[i] = historical[i];
         }
-        instances[config.lookback] = dynamicFeeUnscaled;
+        instances[historicalLength] = dynamicFeeUnscaled;
 
         if (!config.verifier.verifyProof(proof, instances)) {
             revert VerificationFailed();
         } else {
             // Update the stored dynamic fee
-            config.dynamicFee = dynamicFeeUnscaled;
+            config.dynamicFee = scaledFee;
             
             // Set the fee on the vault
             IVaultAdmin(vault).setStaticSwapFeePercentage(pool, scaledFee);
