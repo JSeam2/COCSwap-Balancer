@@ -38,7 +38,9 @@ COCSwap is a suite of tools to help LPs make more money by allowing the use of v
 
 - OLD ~~[FeeManager](https://basescan.org/address/0xEFF3BB1f780D741446d6e376Afe1BD580FBc2F39) `0xEFF3BB1f780D741446d6e376Afe1BD580FBc2F39`~~
 
-- [FeeManager](https://basescan.org/address/0xB503410d20DF3d389d57D5513263e77e003f15aa) `0xB503410d20DF3d389d57D5513263e77e003f15aa`
+- OLD ~~[FeeManager](https://basescan.org/address/0xB503410d20DF3d389d57D5513263e77e003f15aa) `0xB503410d20DF3d389d57D5513263e77e003f15aa`~~
+
+- [FeeManager](https://basescan.org/address/0x029521841aD44633446BBcAe0B703e49ca1E951D) `0x029521841aD44633446BBcAe0B703e49ca1E951D`
 
 - OLD ~~[EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x08C16E2872807520b1DF569588A6B771B331cBAb) `0x08C16E2872807520b1DF569588A6B771B331cBAb`~~
 
@@ -46,10 +48,11 @@ COCSwap is a suite of tools to help LPs make more money by allowing the use of v
 
 - OLD ~~[EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x5dF21B950adc28C56FF3483EcE3c2D559626d756) `0x5dF21B950adc28C56FF3483EcE3c2D559626d756`~~
 
-- OLD ~~[ETH Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x683F03C4B4201C1aB70715e38d79a2E49DB12488) `0x683F03C4B4201C1aB70715e38d79a2E49DB12488`~~
+- OLD ~~[EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x683F03C4B4201C1aB70715e38d79a2E49DB12488) `0x683F03C4B4201C1aB70715e38d79a2E49DB12488`~~
 
+- OLD ~~[EZKL Bosteed ETH/USD Pool](https://balancer.fi/pools/base/v3/0xAa1C578C0D5901E1CE857bBcc6dF641FdCC2903a) `0xAa1C578C0D5901E1CE857bBcc6dF641FdCC2903a`~~
 
-- [ETH Boosteed ETH/USD Pool](https://balancer.fi/pools/base/v3/0xAa1C578C0D5901E1CE857bBcc6dF641FdCC2903a) `0xAa1C578C0D5901E1CE857bBcc6dF641FdCC2903a`
+- [EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x1007551886097eA9d0fd9A0102C74A999264Ce3c) `0x1007551886097eA9d0fd9A0102C74A999264Ce3c`
 
 
 
