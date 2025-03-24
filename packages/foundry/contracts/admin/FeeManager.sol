@@ -105,7 +105,7 @@ contract FeeManager is Ownable {
         }
         
         // Calculate the scaled fee
-        uint256 scaledFee = (dynamicFeeUnscaled * 1e18) / (config.scalingFactorDiv * 1e18) * config.scalingFactorMul;
+        uint256 scaledFee = (dynamicFeeUnscaled * config.scalingFactorMul) / (config.scalingFactorDiv);
         
         // Get historical price
         uint256[] memory historical = config.priceCache.getHistoricalPrice(config.lookback);
