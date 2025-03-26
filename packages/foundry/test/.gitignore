@@ -1,0 +1,6 @@
+secrets.py
+test
+__pycache__/
+contract_updater.log
+hook_updater.log
+input.json

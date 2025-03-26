@@ -22,7 +22,7 @@ import { PoolMock } from "@balancer-labs/v3-vault/contracts/test/PoolMock.sol";
 
 import { EZKLDynamicFeeHook } from "../contracts/hooks/EZKLDynamicFeeHook.sol";
 import { MockVerifier } from "../contracts/mocks/MockVerifier.sol";
-import { IHalo2Verifier } from "../contracts/pools/IHalo2Verifier.sol";
+import { IHalo2Verifier } from "../contracts/utils/IHalo2Verifier.sol";
 import { MockChainlinkPriceCache } from "../contracts/mocks/MockChainlinkPriceCache.sol";
 import { IChainlinkPriceCache } from "../contracts/utils/ChainlinkPriceCache.sol";
 

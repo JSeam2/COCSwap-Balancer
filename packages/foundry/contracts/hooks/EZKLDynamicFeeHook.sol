@@ -17,7 +17,7 @@ import {
 
 import { VaultGuard } from "@balancer-labs/v3-vault/contracts/VaultGuard.sol";
 import { BaseHooks } from "@balancer-labs/v3-vault/contracts/BaseHooks.sol";
-import { IHalo2Verifier } from "../pools/IHalo2Verifier.sol";
+import { IHalo2Verifier } from "../utils/IHalo2Verifier.sol";
 import { IChainlinkPriceCache } from "../utils/ChainlinkPriceCache.sol";
 
 /**

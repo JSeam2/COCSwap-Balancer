@@ -22,6 +22,7 @@
     "foundry:lint": "yarn workspace @se-2/foundry lint",
     "foundry:test": "yarn workspace @se-2/foundry test",
     "test": "yarn foundry:test",
+    "test:FeeManager": "yarn foundry:test:FeeManager",
     "format": "yarn next:format && yarn foundry:format",
     "start": "yarn workspace @se-2/nextjs dev",
     "next:lint": "yarn workspace @se-2/nextjs lint",

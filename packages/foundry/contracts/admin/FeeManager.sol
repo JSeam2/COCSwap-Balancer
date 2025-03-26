@@ -6,10 +6,11 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 import { IVault } from "@balancer-labs/v3-interfaces/contracts/vault/IVault.sol";
+import { IVaultExplorer } from "@balancer-labs/v3-interfaces/contracts/vault/IVaultExplorer.sol";
 import { IVaultAdmin } from "@balancer-labs/v3-interfaces/contracts/vault/IVaultAdmin.sol";
 import { IBasePoolFactory } from "@balancer-labs/v3-interfaces/contracts/vault/IBasePoolFactory.sol";
 import { IProtocolFeeController } from "@balancer-labs/v3-interfaces/contracts/vault/IProtocolFeeController.sol";
-import { IHalo2Verifier } from "../pools/IHalo2Verifier.sol";
+import { IHalo2Verifier } from "../utils/IHalo2Verifier.sol";
 import { IChainlinkPriceCache } from "../utils/ChainlinkPriceCache.sol";
 
 /**
@@ -33,10 +34,19 @@ contract FeeManager is Ownable {
     mapping(address => FeeConfig) public feeConfig;
 
     // Events
-    event NewFeeConfig(address indexed pool, address verifier, address priceCache, uint256 lookback, uint256 scalingFactorDiv, uint256 scalingFactorMul, uint256 initialFee);
+    event NewFeeConfig(
+        address indexed pool,
+        address verifier,
+        address priceCache,
+        uint256 lookback,
+        uint256 scalingFactorDiv,
+        uint256 scalingFactorMul,
+        uint256 initialFee
+    );
     event FeeUpdated(address indexed pool, uint256 swapFeePercentage);
     
     // Errors
+    error PoolConfigExists();
     error VerificationFailed();
     error InvalidPool();
     error InvalidHook();
@@ -72,8 +82,11 @@ contract FeeManager is Ownable {
         uint256 _scalingFactorMul,
         uint256 _initDynamicFee
     ) public onlyOwner {
-        // NOTE: This allows the owner to override the pool
-        // Setup the initial fee config
+        // Check if a fee config already exists for this pool
+        if (address(feeConfig[pool].verifier) != address(0)) {
+            revert PoolConfigExists();
+        }
+        
         feeConfig[pool] = FeeConfig({
             verifier: IHalo2Verifier(_verifier),
             priceCache: IChainlinkPriceCache(_priceCache),
@@ -97,7 +110,7 @@ contract FeeManager is Ownable {
         address pool,
         bytes calldata proof,
         uint256 dynamicFeeUnscaled
-    ) public {
+    ) public returns (bool) {
         FeeConfig storage config = feeConfig[pool];
         
         if (address(config.verifier) == address(0)) {
@@ -130,6 +143,8 @@ contract FeeManager is Ownable {
             // Set the fee on the vault
             IVaultAdmin(vault).setStaticSwapFeePercentage(pool, scaledFee);
             emit FeeUpdated(pool, scaledFee);
+
+            return true;
         }
     }
 }

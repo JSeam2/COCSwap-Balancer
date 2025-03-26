@@ -16,7 +16,7 @@ import {
     WeightedPoolImmutableData
 } from "@balancer-labs/v3-interfaces/contracts/pool-weighted/IWeightedPool.sol";
 import { PoolInfo } from "@balancer-labs/v3-pool-utils/contracts/PoolInfo.sol";
-import { IHalo2Verifier } from "./IHalo2Verifier.sol";
+import { IHalo2Verifier } from "../utils/IHalo2Verifier.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 
