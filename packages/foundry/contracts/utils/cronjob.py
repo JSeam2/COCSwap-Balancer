@@ -6,10 +6,15 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError
 import secrets
 import traceback
+import requests
+import uuid
+
+# DEBUG MODE
+DEBUG_MODE=False
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG if DEBUG_MODE else logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler("contract_updater.log"),
@@ -18,12 +23,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ContractUpdater")
 
+# Number of blocks to lookback for logs
+# 1800 as base has an average of 2 seconds per blockl
+LOG_LOOKBACK = 1800
+
 # Contract information
 CACHE_CONTRACT_ADDRESS = secrets.CACHE_CONTRACT_ADDRESS
 CACHE_CONTRACT_ABI = json.loads('''
 [{"inputs":[{"internalType":"string","name":"_description","type":"string"},{"internalType":"address","name":"_oracle","type":"address"},{"internalType":"uint256","name":"_delay","type":"uint256"},{"internalType":"uint256[]","name":"_roundIds","type":"uint256[]"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"InvalidRange","type":"error"},{"inputs":[],"name":"NoDataAvailable","type":"error"},{"inputs":[],"name":"WaitForDelay","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"timestamp","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"price","type":"uint256"}],"name":"Updated","type":"event"},{"inputs":[],"name":"delay","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"description","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"lookback","type":"uint256"}],"name":"getHistoricalPrice","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"start","type":"uint256"},{"internalType":"uint256","name":"end","type":"uint256"}],"name":"getHistoricalPriceRange","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"lookback","type":"uint256"}],"name":"getHistoricalTimestamp","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"start","type":"uint256"},{"internalType":"uint256","name":"end","type":"uint256"}],"name":"getHistoricalTimestampRange","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"latestSnapshotId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"oracle","outputs":[{"internalType":"contract IAggregatorInterface","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"prices","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"timestamps","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"update","outputs":[],"stateMutability":"nonpayable","type":"function"}]
 ''')
 
+POOL_CONTRACT_ADDRESS = secrets.POOL_CONTRACT_ADDRESS
+FEE_MANAGER_ADDRESS = secrets.FEE_MANAGER_ADDRESS
+FEE_MANAGER_ABI = json.loads('''
+[{"inputs":[{"internalType":"address","name":"_vault","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"FeeTooHigh","type":"error"},{"inputs":[],"name":"InvalidHook","type":"error"},{"inputs":[],"name":"InvalidPool","type":"error"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"OwnableInvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"OwnableUnauthorizedAccount","type":"error"},{"inputs":[],"name":"VerificationFailed","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"pool","type":"address"},{"indexed":false,"internalType":"uint256","name":"swapFeePercentage","type":"uint256"}],"name":"FeeUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"pool","type":"address"},{"indexed":false,"internalType":"address","name":"verifier","type":"address"},{"indexed":false,"internalType":"address","name":"priceCache","type":"address"},{"indexed":false,"internalType":"uint256","name":"lookback","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"scalingFactor","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"initialFee","type":"uint256"}],"name":"NewFeeConfig","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"feeConfig","outputs":[{"internalType":"contract IHalo2Verifier","name":"verifier","type":"address"},{"internalType":"contract IChainlinkPriceCache","name":"priceCache","type":"address"},{"internalType":"uint256","name":"lookback","type":"uint256"},{"internalType":"uint256","name":"scalingFactor","type":"uint256"},{"internalType":"uint256","name":"dynamicFee","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"pool","type":"address"},{"internalType":"address","name":"_verifier","type":"address"},{"internalType":"address","name":"_priceCache","type":"address"},{"internalType":"uint256","name":"_lookback","type":"uint256"},{"internalType":"uint256","name":"_scalingFactor","type":"uint256"},{"internalType":"uint256","name":"_initDynamicFee","type":"uint256"}],"name":"registerFeeConfig","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"pool","type":"address"},{"internalType":"bytes","name":"proof","type":"bytes"},{"internalType":"uint256","name":"dynamicFeeUnscaled","type":"uint256"}],"name":"setStaticSwapFeePercentage","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"vault","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}]
+''')
+
+# Lilith configuration
+ARCHON_URL = secrets.ARCHON_URL
+ARCHON_API_KEY = secrets.ARCHON_API_KEY
+
+# RPC configuration
 ETHEREUM_NODE_URL = secrets.ETHEREUM_NODE_URL
 
 # Wallet configuration
@@ -32,7 +52,6 @@ WALLET_ADDRESS = secrets.WALLET_ADDRESS
 
 # Constants
 WAIT_FOR_DELAY_RETRY_TIME = 30  # seconds
-DEBUG_MODE = True  # Set to True for more verbose debugging
 UPDATE_WINDOW_BUFFER = 60  # seconds before the next valid update time to start attempting updates
 CHECK_INTERVAL = 15  # seconds between each check when waiting
 MAX_RETRIES = 5  # Maximum number of retries on failure
@@ -44,7 +63,19 @@ ERROR_NO_DATA_AVAILABLE = "0x390d9a43"  # Hex signature for NoDataAvailable erro
 
 
 class ContractUpdater:
-    def __init__(self, node_url, contract_address, contract_abi, wallet_address, private_key):
+    def __init__(
+            self,
+            cache_contract_address,
+            cache_contract_abi,
+            pool_contract_address,
+            fee_manager_contract_address,
+            fee_manager_contract_abi,
+            node_url,
+            wallet_address,
+            private_key,
+            archon_url,
+            archon_api_key,
+        ):
         try:
             logger.info(f"Connecting to Ethereum node at {node_url}")
 
@@ -58,13 +89,27 @@ class ContractUpdater:
                 block_number = self.w3.eth.block_number
                 logger.info(f"Connected to Ethereum node. Chain ID: {chain_id}, Block number: {block_number}")
 
-            self.contract_address = Web3.to_checksum_address(contract_address)
-            logger.info(f"Using contract address: {self.contract_address}")
-            self.contract = self.w3.eth.contract(address=self.contract_address, abi=contract_abi)
+            # setup cache contract
+            self.cache_contract_address = Web3.to_checksum_address(cache_contract_address)
+            logger.info(f"Using ChainlinkPriceCache contract address: {self.cache_contract_address}")
+            self.cache_contract = self.w3.eth.contract(address=self.cache_contract_address, abi=cache_contract_abi)
+
+            # setup pool
+            self.pool_contract_address = Web3.to_checksum_address(pool_contract_address)
+            logger.info(f"Using Pool contract address: {self.pool_contract_address}")
+
+            # setup fee manager
+            self.fee_manager_contract_address = Web3.to_checksum_address(fee_manager_contract_address)
+            logger.info(f"Using FeeManager contract address: {self.fee_manager_contract_address}")
+            self.fee_manager_contract = self.w3.eth.contract(address=self.fee_manager_contract_address, abi=fee_manager_contract_abi)
 
             self.wallet_address = Web3.to_checksum_address(wallet_address)
             logger.info(f"Using wallet address: {self.wallet_address}")
             self.private_key = private_key
+
+            # setup archon
+            self.archon_url = archon_url
+            self.archon_api_key = archon_api_key
 
             # Check wallet balance
             balance = self.w3.eth.get_balance(self.wallet_address)
@@ -78,27 +123,26 @@ class ContractUpdater:
 
         except Exception as e:
             logger.error(f"Error initializing contract: {e}")
-            if DEBUG_MODE:
-                logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise
 
     def refresh_contract_data(self):
         """Refresh all contract data"""
         try:
             # Get contract description
-            self.description = self.contract.functions.description().call()
+            self.description = self.cache_contract.functions.description().call()
             logger.info(f"Contract description: {self.description}")
 
             # Get delay value
-            self.delay = self.contract.functions.delay().call()
+            self.delay = self.cache_contract.functions.delay().call()
             logger.info(f"Contract delay: {self.delay} seconds")
 
             # Get latest snapshot ID
-            self.latest_snapshot_id = self.contract.functions.latestSnapshotId().call()
+            self.latest_snapshot_id = self.cache_contract.functions.latestSnapshotId().call()
             logger.info(f"Latest snapshot ID: {self.latest_snapshot_id}")
 
             # Get latest timestamp
-            self.latest_timestamp = self.contract.functions.timestamps(self.latest_snapshot_id).call()
+            self.latest_timestamp = self.cache_contract.functions.timestamps(self.latest_snapshot_id).call()
 
             # Convert to human-readable time
             timestamp_datetime = datetime.datetime.fromtimestamp(self.latest_timestamp)
@@ -112,8 +156,7 @@ class ContractUpdater:
             return True
         except Exception as e:
             logger.error(f"Error refreshing contract data: {e}")
-            if DEBUG_MODE:
-                logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return False
 
     def time_to_next_update(self):
@@ -152,7 +195,7 @@ class ContractUpdater:
             logger.info(f"Using fixed gas limit: {gas_limit}")
 
             # Build the transaction with fixed gas limit and adjusted gas price
-            tx = self.contract.functions.update().build_transaction({
+            tx = self.cache_contract.functions.update().build_transaction({
                 'from': self.wallet_address,
                 'nonce': nonce,
                 'gas': gas_limit,
@@ -161,31 +204,30 @@ class ContractUpdater:
             })
 
             # Debug transaction details
-            if DEBUG_MODE:
-                logger.info(f"Transaction details: {tx}")
+            logger.debug(f"update transaction details: {tx}")
 
             # Sign the transaction
             signed_tx = self.w3.eth.account.sign_transaction(tx, self.private_key)
-            logger.info(f"Transaction signed. Hash: {self.w3.to_hex(self.w3.keccak(signed_tx.raw_transaction))}")
+            logger.info(f"update transaction signed. Hash: {self.w3.to_hex(self.w3.keccak(signed_tx.raw_transaction))}")
 
             # Send the transaction
             tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-            logger.info(f"Update transaction sent: {tx_hash.hex()}")
+            logger.info(f"update transaction sent: 0x{tx_hash.hex()}")
             
             # Wait for transaction receipt with a timeout
             try:
-                receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-                logger.info(f"Transaction confirmed in block {receipt['blockNumber']}")
+                receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
+                logger.info(f"update transaction confirmed in block {receipt['blockNumber']}")
                 
                 # Check status of transaction
                 if receipt['status'] == 1:
-                    logger.info(f"Transaction succeeded. Gas used: {receipt['gasUsed']}")
+                    logger.info(f"update transaction succeeded. Gas used: {receipt['gasUsed']}")
                     return True, None
                 else:
-                    logger.error(f"Transaction failed. Gas used: {receipt['gasUsed']}")
-                    return False, "Transaction failed"
+                    logger.error(f"update transaction failed. Gas used: {receipt['gasUsed']}")
+                    return False, "update transaction failed"
             except Exception as timeout_error:
-                logger.warning(f"Transaction may be pending: {str(timeout_error)}")
+                logger.warning(f"update transaction may be pending: {str(timeout_error)}")
                 return False, "Timeout"
             
         except ContractLogicError as e:
@@ -207,8 +249,7 @@ class ContractUpdater:
                 return False, "WaitForDelay"
             else:
                 logger.error(f"Contract error: {error_message}")
-                if DEBUG_MODE:
-                    logger.error(f"Traceback: {traceback.format_exc()}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 return False, str(e)
                 
         except Exception as e:
@@ -222,14 +263,335 @@ class ContractUpdater:
                 return False, "Underpriced"
             elif "bad request" in error_message.lower():
                 logger.error(f"Bad Request error from node provider: {error_message}")
-                if DEBUG_MODE:
-                    logger.error(f"Traceback: {traceback.format_exc()}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 return False, "BadRequest"
             else:
                 logger.error(f"Error calling update function: {error_message}")
-                if DEBUG_MODE:
-                    logger.error(f"Traceback: {traceback.format_exc()}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 return False, str(e)
+
+    def call_get_historical_prices(self, lookback=337):
+        """
+        Fetch historical prices from the ChainlinkPriceCache contract
+
+        Args:
+            web3: Web3 instance
+            price_cache_contract_address: Address of the deployed ChainlinkPriceCache contract
+            lookback: Number of historical prices to retrieve (default: 337)
+
+        Returns:
+            List of historical prices
+        """
+        try:
+            # Call getHistoricalPrice function
+            self.historical_prices = self.cache_contract.functions.getHistoricalPrice(lookback).call()
+            self.historical_timestamps = self.cache_contract.functions.getHistoricalTimestamp(lookback).call()
+
+            # Log the results
+            logger.info(f"Successfully retrieved {len(self.historical_prices)} historical prices")
+            logger.debug(f"prices = {self.historical_prices}")
+            logger.debug(f"timestamps = {self.historical_timestamps}")
+
+            # format into json
+            self.input_data = {
+                "input_data": [self.historical_prices],
+                "output_data": None
+            }
+
+            if DEBUG_MODE:
+                with open("input_debug.json", "w") as f:
+                    json.dump(self.input_data, f)
+
+            return self.input_data
+
+        except ContractLogicError as e:
+            logger.error(f"Contract logic error: {str(e)}")
+            # Check for specific error messages
+            if "NoDataAvailable" in str(e):
+                logger.error("No historical data available. The contract may not have enough history.")
+            return []
+        except Exception as e:
+            logger.error(f"Error retrieving historical prices: {str(e)}")
+            logger.error(traceback.format_exc())
+            return []
+
+    def call_lilith(self):
+        """
+        Calls lilith with the historical prices and returns proof, outputs
+        """
+        latest_uuid = str(uuid.uuid4())
+
+        try:
+            res = requests.post(
+                url=f"{self.archon_url}/recipe?user_id=8c9f812f-b85e-47d6-9fca-c4f9b34622b7",
+                headers={
+                    "X-API-KEY": self.archon_api_key,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "commands": [
+                        {
+                            "artifact": "balancer_fee_model",
+                            "binary": "ezkl",
+                            "deployment": "0195d1ec-e714-72e4-baef-578131cc7f39",
+                            "command": [
+                                "gen-witness",
+                                f"--data input_{latest_uuid}.json",
+                                f"--compiled-circuit model.compiled",
+                                f"--output witness_{latest_uuid}.json"
+                            ],
+                        },
+                        {
+                            "artifact": "balancer_fee_model",
+                            "binary": "ezkl",
+                            "deployment": "0195d1ec-e714-72e4-baef-578131cc7f39",
+                            "command": [
+                                "prove",
+                                f"--witness witness_{latest_uuid}.json",
+                                f"--compiled-circuit model.compiled" ,
+                                "--pk-path pk.key",
+                                f"--proof-path proof_{latest_uuid}.json",
+                            ],
+                            "output_path": [f"proof_{latest_uuid}.json"]
+                        },
+                    ],
+                    "data": [{
+                        "target_path": f"input_{latest_uuid}.json",
+                        "data": self.input_data
+                    }],
+                }
+            )
+
+            if res.status_code >= 400:
+                logger.error(f"Error: HTTP {res.status_code}")
+                logger.error(f"Error message: {res.content}")
+            else:
+                logger.info("Request successful")
+
+                data = json.loads(res.content.decode('utf-8'))
+                logger.info(f"full data: {data}")
+                logger.info(f"id: {data['id']}")
+
+                cluster_id = data["id"]
+
+
+                query_count = 0
+
+                while query_count < 60:
+                    time.sleep(10)
+                    # get job status
+                    # pass id to client so client polls
+                    res = requests.get(
+                        url=f"{self.archon_url}/recipe/{str(cluster_id)}?user_id=8c9f812f-b85e-47d6-9fca-c4f9b34622b7",
+                        headers={
+                            "X-API-KEY": self.archon_api_key,
+                        }
+                    )
+                    res.raise_for_status()
+                    data = json.loads(res.content.decode('utf-8'))
+                    logger.debug(f"witness data: {data[0]}")
+                    logger.debug(f"prove data: {data[1]}")
+                    logger.debug(f"prove status: {data[1]['status']}")
+
+                    status = data[1]['status']
+
+                    if status == "Complete":
+                        logger.info(f"Complete: {data}")
+                        json_data = json.loads(data[1]['output'][0]['utf8_string'])
+
+                        res.raise_for_status()
+
+                        self.proof_hexstring = json_data['hex_proof']
+                        self.proof = Web3.to_bytes(hexstr=json_data['hex_proof'])
+
+                        logger.debug(f"hex_proof: {self.proof_hexstring}")
+
+                        self.instances = json_data['pretty_public_inputs']['inputs'][0] + \
+                            json_data['pretty_public_inputs']['outputs'][0]
+
+                        logger.debug(f"instances: {self.instances}")
+
+                        return self.proof, self.instances
+
+                    if status == "Errored":
+                        logger.error("ERRORED")
+                        logger.error(f"Error data: {data}")
+                        break
+
+                    query_count += 1
+
+        except Exception as e:
+            logger.error(f"Error parsing response: {str(e)}")
+            logger.error(traceback.format_exc())
+
+    def call_update_fee(self, retry_count=0):
+        """Call the update function on the contract with gas price adjustments on retries"""
+        try:
+            # Get base gas price
+            base_gas_price = self.w3.eth.gas_price
+
+            # Apply gas price multiplier based on retry count (10% increase per retry)
+            multiplier = 1.0 + (retry_count * 0.2)  # 20% increase per retry
+            gas_price = int(base_gas_price * multiplier)
+
+            gas_price_gwei = self.w3.from_wei(gas_price, 'gwei')
+            logger.info(f"Using gas price: {gas_price_gwei} Gwei (retry {retry_count}, multiplier {multiplier:.2f}x)")
+
+            # Get the transaction count for nonce
+            nonce = self.w3.eth.get_transaction_count(self.wallet_address)
+            logger.info(f"Using nonce: {nonce}")
+
+            # Use a fixed gas limit instead of estimating
+            # This bypasses the estimate_gas call which can trigger the custom error
+            gas_limit = 30000000  # Fixed gas limit that should be sufficient for most update calls
+            logger.info(f"Using fixed gas limit: {gas_limit}")
+
+            # Build the transaction with fixed gas limit and adjusted gas price
+            tx = self.fee_manager_contract.functions.setStaticSwapFeePercentage(
+                self.pool_contract_address,
+                self.proof,
+                int(self.instances[-1], 16)
+            ).build_transaction({
+                'from': self.wallet_address,
+                'nonce': nonce,
+                'gas': gas_limit,
+                'gasPrice': gas_price,
+                'chainId': self.w3.eth.chain_id,
+            })
+
+            # Debug transaction details
+            logger.debug(f"Transaction details: {tx}")
+
+            # Sign the transaction
+            signed_tx = self.w3.eth.account.sign_transaction(tx, self.private_key)
+            logger.info(f"Transaction signed. Hash: {self.w3.to_hex(self.w3.keccak(signed_tx.raw_transaction))}")
+
+            # Send the transaction
+            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+            logger.info(f"setStaticSwapFeePercentage transaction sent: 0x{tx_hash.hex()}")
+
+            # Wait for transaction receipt with a timeout
+            try:
+                receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
+                logger.info(f"setStaticSwapFeePercentage transaction confirmed in block {receipt['blockNumber']}")
+
+                # Check status of transaction
+                if receipt['status'] == 1:
+                    logger.info(f"setStaticSwapFeePercentage Transaction succeeded. Gas used: {receipt['gasUsed']}")
+                    return True, None
+                else:
+                    logger.error(f"setStaticSwapFeePercentage Transaction failed. Gas used: {receipt['gasUsed']}")
+                    return False, "Transaction failed"
+            except Exception as timeout_error:
+                logger.warning(f"setStaticSwapFeePercentage Transaction may be pending: {str(timeout_error)}")
+                return False, "Timeout"
+
+        except ContractLogicError as e:
+            error_message = str(e)
+
+            # Custom contract error handling
+            if ERROR_WAIT_FOR_DELAY in error_message:
+                # This is the specific error we're seeing in the logs
+                logger.warning(f"Contract custom error detected: {ERROR_WAIT_FOR_DELAY} (WaitForDelay)")
+                return False, "WaitForDelay"
+            elif ERROR_INVALID_RANGE in error_message:
+                logger.error(f"Contract error: InvalidRange ({ERROR_INVALID_RANGE})")
+                return False, "InvalidRange"
+            elif ERROR_NO_DATA_AVAILABLE in error_message:
+                logger.error(f"Contract error: NoDataAvailable ({ERROR_NO_DATA_AVAILABLE})")
+                return False, "NoDataAvailable"
+            elif "WaitForDelay" in error_message:
+                logger.warning(f"WaitForDelay error: {error_message}")
+                return False, "WaitForDelay"
+            else:
+                logger.error(f"Contract error: {error_message}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                return False, str(e)
+
+        except Exception as e:
+            error_message = str(e)
+
+            if "out of gas" in error_message.lower():
+                logger.error(f"Out of gas error: {error_message}")
+                return False, "OutOfGas"
+            elif "underpriced" in error_message.lower():
+                logger.error(f"Replacement transaction underpriced: {error_message}")
+                return False, "Underpriced"
+            elif "bad request" in error_message.lower():
+                logger.error(f"Bad Request error from node provider: {error_message}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                return False, "BadRequest"
+            else:
+                logger.error(f"Error calling setStaticSwapFeePercentage function: {error_message}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                return False, str(e)
+
+
+    def check_recent_fee_update(self):
+        """
+        Check if setStaticSwapFeePercentage was called within the last hour
+        Returns True if a recent update was found, False otherwise
+        """
+        try:
+            # Get current block number
+            current_block = self.w3.eth.block_number
+            
+            # Look back approximately 1 hour
+            # For Base with ~2 second block time, we need to look back ~1800 blocks
+            from_block = max(0, current_block - LOG_LOOKBACK)
+            
+            logs = self.fee_manager_contract.events.FeeUpdated().get_logs(from_block=from_block)
+            logger.info(f"FeeUpdated logs: {logs}")
+
+            if len(logs) > 0:
+                # TODO check the pool address
+                for log in logs:
+                    if log['args']['pool'] == self.pool_contract_address:
+                        logger.info("Found a recent FeeUpdated event, skipping")
+                        return True
+
+            else:
+                logger.info("No recent FeeUpdated event, proceed to call setStaticSwapFeePercentage")
+                return False
+            
+        except Exception as e:
+            logger.error(f"Error checking for recent fee updates: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
+            # If we can't check, assume no recent updates to be safe
+            return False
+    
+    def check_update_in_progress(self):
+        """
+        Check if there are any pending update transactions for the price cache contract,
+        regardless of which wallet is sending them.
+        Returns True if an update is in progress, False otherwise
+        """
+        try:
+            # Check the mempool for pending transactions
+            pending_txs = self.w3.eth.get_block('pending', full_transactions=True)
+            
+            if pending_txs and 'transactions' in pending_txs:
+                # Look for any transactions to the cache contract
+                for tx in pending_txs['transactions']:
+                    if tx.get('to') and tx['to'].lower() == self.cache_contract_address.lower():
+                        # For better accuracy, we could decode the input data to check if it's actually
+                        # calling the update() function, but this requires access to the contract ABI
+                        input_data = tx.get('input', '')
+                        # The function signature for update() should be the first 4 bytes (8 hex chars + '0x')
+                        update_signature = self.w3.keccak(text="update()").hex()[:10]  # '0x' + first 8 chars
+                        
+                        if input_data.startswith(update_signature):
+                            logger.info(f"Found pending update transaction from {tx['from']} to cache contract")
+                            return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking for pending updates: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            # If we can't check, assume no updates in progress to be safe
+            return False
 
     def run(self):
         """Run the updater loop with intelligent timing"""
@@ -240,77 +602,110 @@ class ContractUpdater:
                 # Refresh contract data including latest timestamp and delay
                 self.refresh_contract_data()
 
-                # Check if it's time to update
+                # Check if it's time to update the price cache
                 if self.is_update_time():
-                    logger.info("It's time to attempt the update")
+                    logger.info("It's time to attempt the price cache update")
 
                     # Initialize retry counter
                     retries = 0
                     update_successful = False
 
-                    # Try to update until successful or max retries reached
-                    while not update_successful and retries < MAX_RETRIES:
-                        # Call update function with retry count
-                        success, error = self.call_update(retry_count=retries)
+                    # Check if there's an update in the mempool
+                    if not self.check_update_in_progress():
+                        # Try to update until successful or max retries reached
+                        while not update_successful and retries < MAX_RETRIES:
+                            # Call update function with retry count
+                            success, error = self.call_update(retry_count=retries)
 
-                        if success:
-                            logger.info("Update successful!")
-                            update_successful = True
-                            # Refresh contract data after successful update
-                            self.refresh_contract_data()
-                        else:
-                            retries += 1
-
-                            if error == "WaitForDelay":
-                                # If WaitForDelay error, calculate better wait time
-                                current_time = int(time.time())
-                                time_to_update = max(0, self.next_update_time - current_time)
-
-                                if time_to_update > 0:
-                                    # If we know exactly how long to wait, use that
-                                    wait_time = min(time_to_update + 1, 60)  # Cap at 60 seconds
-                                    logger.info(f"WaitForDelay error. Next valid update in {time_to_update} seconds. Waiting {wait_time} seconds before retry {retries}/{MAX_RETRIES}...")
-                                else:
-                                    # If we're already past the theoretical update time, use shorter wait
-                                    wait_time = min(WAIT_FOR_DELAY_RETRY_TIME, 10)
-                                    logger.info(f"WaitForDelay error despite being past update time. Waiting {wait_time} seconds before retry {retries}/{MAX_RETRIES}...")
-
-                                time.sleep(wait_time)
-                            elif error == "OutOfGas":
-                                # If out of gas, alert the user and wait before retrying
-                                logger.critical("ATTENTION: Wallet needs to be topped up! Out of gas error.")
-                                print("\n" + "!" * 80)
-                                print("CRITICAL: Your wallet needs to be topped up! Transaction failed due to insufficient gas.")
-                                print("Please add funds to your wallet address: " + self.wallet_address)
-                                print("!" * 80 + "\n")
-                                time.sleep(5)  # Short wait before retry with higher gas price
-                            elif error == "Underpriced":
-                                # For underpriced transactions, just retry with higher gas
-                                logger.warning("Transaction underpriced. Will retry with higher gas price.")
-                                time.sleep(5)  # Short wait before retry with higher gas price
-                            elif error == "Timeout":
-                                # If timeout occurred, retry with higher gas price
-                                logger.warning(f"Transaction timeout. Will retry with higher gas price. Retry {retries}/{MAX_RETRIES}")
-                                time.sleep(10)  # Short wait before retry
-                            elif error == "InvalidRange" or error == "NoDataAvailable":
-                                # These are contract-specific errors that may require manual intervention
-                                logger.error(f"Contract error {error}. This may require manual intervention. Retry {retries}/{MAX_RETRIES}")
-                                time.sleep(30)  # Longer wait for contract errors
-                            elif error == "BadRequest":
-                                # Handle bad request errors from the node provider
-                                logger.error(f"Bad Request error from the node provider. Retry {retries}/{MAX_RETRIES}")
-                                time.sleep(15)  # Short wait
+                            if success:
+                                logger.info("Price cache update successful!")
+                                update_successful = True
+                                # Refresh contract data after successful update
+                                self.refresh_contract_data()
                             else:
-                                # For other errors, log and retry
-                                logger.error(f"Error: {error}. Retry {retries}/{MAX_RETRIES}")
-                                time.sleep(15)  # Short wait
+                                retries += 1
 
-                    if not update_successful:
-                        logger.warning(f"Failed to update after {MAX_RETRIES} attempts. Will try again later.")
-                        # Wait a bit before checking again to avoid excessive logging
-                        time.sleep(60)
+                                if error == "WaitForDelay":
+                                    # If WaitForDelay error, calculate better wait time
+                                    current_time = int(time.time())
+                                    time_to_update = max(0, self.next_update_time - current_time)
+
+                                    if time_to_update > 0:
+                                        # If we know exactly how long to wait, use that
+                                        wait_time = min(time_to_update + 1, 60)  # Cap at 60 seconds
+                                        logger.info(f"WaitForDelay error. Next valid update in {time_to_update} seconds. Waiting {wait_time} seconds before retry {retries}/{MAX_RETRIES}...")
+                                    else:
+                                        # If we're already past the theoretical update time, use shorter wait
+                                        wait_time = min(WAIT_FOR_DELAY_RETRY_TIME, 10)
+                                        logger.info(f"WaitForDelay error despite being past update time. Waiting {wait_time} seconds before retry {retries}/{MAX_RETRIES}...")
+
+                                    time.sleep(wait_time)
+                                elif error == "OutOfGas":
+                                    # If out of gas, alert the user and wait before retrying
+                                    logger.critical("ATTENTION: Wallet needs to be topped up! Out of gas error.")
+                                    print("\n" + "!" * 80)
+                                    print("CRITICAL: Your wallet needs to be topped up! Transaction failed due to insufficient gas.")
+                                    print("Please add funds to your wallet address: " + self.wallet_address)
+                                    print("!" * 80 + "\n")
+                                    time.sleep(5)  # Short wait before retry with higher gas price
+                                elif error == "Underpriced":
+                                    # For underpriced transactions, just retry with higher gas
+                                    logger.warning("Transaction underpriced. Will retry with higher gas price.")
+                                    time.sleep(5)  # Short wait before retry with higher gas price
+                                elif error == "Timeout":
+                                    # If timeout occurred, retry with higher gas price
+                                    logger.warning(f"Transaction timeout. Will retry with higher gas price. Retry {retries}/{MAX_RETRIES}")
+                                    time.sleep(10)  # Short wait before retry
+                                elif error == "InvalidRange" or error == "NoDataAvailable":
+                                    # These are contract-specific errors that may require manual intervention
+                                    logger.error(f"Contract error {error}. This may require manual intervention. Retry {retries}/{MAX_RETRIES}")
+                                    time.sleep(30)  # Longer wait for contract errors
+                                elif error == "BadRequest":
+                                    # Handle bad request errors from the node provider
+                                    logger.error(f"Bad Request error from the node provider. Retry {retries}/{MAX_RETRIES}")
+                                    time.sleep(15)  # Short wait
+                                else:
+                                    # For other errors, log and retry
+                                    logger.error(f"Error: {error}. Retry {retries}/{MAX_RETRIES}")
+                                    time.sleep(15)  # Short wait
+
+                        if not update_successful:
+                            logger.warning(f"Failed to update price cache after {MAX_RETRIES} attempts. Will try again later.")
+                            # Wait a bit before checking again to avoid excessive logging
+                            time.sleep(60)
                 else:
-                    # Not yet time to update
+                    # Check if we should run the fee update routine
+                    # Only run if no price cache update is in progress
+                    if not self.check_update_in_progress():
+                        # Also check if a fee update was already done recently
+                        if not self.check_recent_fee_update():
+                            logger.info("Running fee update routine")
+                            
+                            # 1. Call get historical prices
+                            historical_data = self.call_get_historical_prices()
+                            if historical_data:
+                                # 2. Call Lilith to get proof and dynamic fee
+                                proof_result = self.call_lilith()
+                                if proof_result:
+                                    # Unpack the proof and instances
+                                    _proof, _instances = proof_result
+                                    
+                                    # 3. Call update fee
+                                    success, error = self.call_update_fee()
+                                    if success:
+                                        logger.info("Successfully updated fee")
+                                    else:
+                                        logger.error(f"Failed to update fee: {error}")
+                                else:
+                                    logger.error("Failed to get proof from Lilith")
+                            else:
+                                logger.error("Failed to get historical prices")
+                        else:
+                            logger.info("Skipping fee update routine - recent update detected")
+                    else:
+                        logger.info("Skipping fee update routine - price cache update in progress")
+                    
+                    # Calculate time remaining until next price cache update
                     time_remaining = self.time_to_next_update()
 
                     # Format time remaining nicely
@@ -323,7 +718,7 @@ class ContractUpdater:
                         else:
                             time_str = f"{int(minutes)}m {int(seconds)}s"
 
-                        logger.info(f"Next update in {time_str} (at {datetime.datetime.fromtimestamp(self.next_update_time).strftime('%Y-%m-%d %H:%M:%S')})")
+                        logger.info(f"Next price cache update in {time_str} (at {datetime.datetime.fromtimestamp(self.next_update_time).strftime('%Y-%m-%d %H:%M:%S')})")
 
                         # If we have more than 5 minutes, wait longer between checks
                         if time_remaining > 300:
@@ -334,14 +729,13 @@ class ContractUpdater:
                         time.sleep(sleep_time)
                     else:
                         # Should not get here often, but just in case
-                        logger.info("Time to update has passed but not detected earlier. Checking again.")
+                        logger.info("Time to price cache update has passed but not detected earlier. Checking again.")
                         time.sleep(5)
 
             except Exception as e:
                 # Catch any unexpected errors in the main loop
                 logger.error(f"Unexpected error in main loop: {e}")
-                if DEBUG_MODE:
-                    logger.error(f"Traceback: {traceback.format_exc()}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 time.sleep(60)  # Wait a minute before continuing
 
 
@@ -350,7 +744,16 @@ def main():
     
     try:
         # Check if the secrets file exists and has the required variables
-        required_vars = ['CACHE_CONTRACT_ADDRESS', 'ETHEREUM_NODE_URL', 'WALLET_PRIVATE_KEY', 'WALLET_ADDRESS']
+        required_vars = [
+            'CACHE_CONTRACT_ADDRESS',
+            'POOL_CONTRACT_ADDRESS',
+            'FEE_MANAGER_ADDRESS',
+            'ETHEREUM_NODE_URL',
+            'WALLET_PRIVATE_KEY',
+            'WALLET_ADDRESS',
+            'ARCHON_URL',
+            'ARCHON_API_KEY',
+        ]
         missing_vars = []
 
         for var in required_vars:
@@ -362,11 +765,17 @@ def main():
             raise ValueError(f"Missing required variables in secrets file: {', '.join(missing_vars)}")
 
         updater = ContractUpdater(
-            ETHEREUM_NODE_URL,
             CACHE_CONTRACT_ADDRESS,
             CACHE_CONTRACT_ABI,
+            POOL_CONTRACT_ADDRESS,
+            FEE_MANAGER_ADDRESS,
+            FEE_MANAGER_ABI,
+            ETHEREUM_NODE_URL,
             WALLET_ADDRESS,
-            WALLET_PRIVATE_KEY
+            WALLET_PRIVATE_KEY,
+            ARCHON_URL,
+            ARCHON_API_KEY
+
         )
         
         updater.run()
@@ -374,8 +783,7 @@ def main():
         logger.info("Script interrupted by user")
     except Exception as e:
         logger.critical(f"Fatal error: {e}")
-        if DEBUG_MODE:
-            logger.critical(f"Traceback: {traceback.format_exc()}")
+        logger.critical(f"Traceback: {traceback.format_exc()}")
         raise
 
 

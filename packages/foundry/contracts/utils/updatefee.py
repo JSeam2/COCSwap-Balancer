@@ -179,8 +179,6 @@ def call_lilith(output_data):
 
                     res.raise_for_status()
 
-                    proof_data = res.json()
-
                     logger.info(f"hex_proof: {json_data['hex_proof']}")
 
                     instances = json_data['pretty_public_inputs']['inputs'][0] + \

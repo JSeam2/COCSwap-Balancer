@@ -3,3 +3,4 @@ test
 __pycache__/
 contract_updater.log
 hook_updater.log
+input_debug.json
