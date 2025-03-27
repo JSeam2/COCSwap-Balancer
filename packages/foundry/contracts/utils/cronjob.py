@@ -581,6 +581,12 @@ class ContractUpdater:
                         # The function signature for update() should be the first 4 bytes (8 hex chars + '0x')
                         update_signature = self.w3.keccak(text="update()").hex()[:10]  # '0x' + first 8 chars
                         
+                        # Ensure both are strings for comparison
+                        if isinstance(input_data, bytes):
+                            input_data = input_data.hex()
+                            if not input_data.startswith('0x'):
+                                input_data = '0x' + input_data
+                        
                         if input_data.startswith(update_signature):
                             logger.info(f"Found pending update transaction from {tx['from']} to cache contract")
                             return True
