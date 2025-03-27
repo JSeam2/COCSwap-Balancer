@@ -24,7 +24,7 @@ The Dynamic Fee Manager works as follows
 - Take the proof and optimal fee and pass it to the relevant pool via `FeeManager.setStaticSwapFeePercentage`
 
 ### Dynamic Fee Demo
-[Youtube Video](https://youtu.be/RHvnQFJXk0U)
+[Youtube Video](https://youtu.be/sycKW0ecO3I?si=EzoCvZOMLKuaMKVm)
 
 
 ### Quickstart
@@ -42,7 +42,9 @@ The Dynamic Fee Manager works as follows
 
 4. Run `packages/foundry/contracts/utils/cronjob.py`. You will also need to set the right secrets in `secrets.py`. This script is used to call `ChainlinkPriceCache.update` and to call `FeeManager.setStaticSwapFeePercentage`.
 
-**Note:** You may also DM jseam or other EZKL core team members to include the address into the existing running cronjob script.
+**Note 1:** You may also DM jseam or other EZKL core team members to include the address into the existing running cronjob script.
+
+**Note 2:** You will need an API key to access Lilith to produce the proofs, please DM jseam or other EZKL core team members
 
 ### Base Contract Deployment
 
