@@ -51,10 +51,10 @@ WALLET_PRIVATE_KEY = secrets.WALLET_PRIVATE_KEY
 WALLET_ADDRESS = secrets.WALLET_ADDRESS
 
 # Constants
-WAIT_FOR_DELAY_RETRY_TIME = 30  # seconds
+WAIT_FOR_DELAY_RETRY_TIME = 120  # seconds
 UPDATE_WINDOW_BUFFER = 60  # seconds before the next valid update time to start attempting updates
 CHECK_INTERVAL = 15  # seconds between each check when waiting
-MAX_RETRIES = 5  # Maximum number of retries on failure
+MAX_RETRIES = 10  # Maximum number of retries on failure
 
 # Error signatures from contract
 ERROR_WAIT_FOR_DELAY = "0x11c973a0"  # Hex signature for WaitForDelay error
@@ -667,12 +667,12 @@ class ContractUpdater:
                                 else:
                                     # For other errors, log and retry
                                     logger.error(f"Error: {error}. Retry {retries}/{MAX_RETRIES}")
-                                    time.sleep(15)  # Short wait
+                                    time.sleep(30)  # 30 seconds wait
 
                         if not update_successful:
                             logger.warning(f"Failed to update price cache after {MAX_RETRIES} attempts. Will try again later.")
                             # Wait a bit before checking again to avoid excessive logging
-                            time.sleep(60)
+                            time.sleep(120)
                 else:
                     # Check if we should run the fee update routine
                     # Only run if no price cache update is in progress
