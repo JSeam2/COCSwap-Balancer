@@ -1,3 +1,7 @@
+"""
+Utility code to test the update lilith logic. This is mostly meant for testing purposes.
+Use cronjob.py for production.
+"""
 import uuid
 import secrets
 import requests

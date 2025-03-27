@@ -1,5 +1,5 @@
 """
-Utility contract to test the update fee logic. This is mostly meant for testing purposes.
+Utility code to test the update fee logic. This is mostly meant for testing purposes.
 Use cronjob.py for production.
 """
 import time
