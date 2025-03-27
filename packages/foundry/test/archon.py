@@ -40,7 +40,7 @@ try:
                 {
                     "artifact": "balancer_fee_model",
                     "binary": "ezkl",
-                    "deployment": "0195a9d3-6efb-7597-b846-3547ff9424b7",
+                    "deployment": DEPLOYMENT_NAME,
                     "command": [
                         "gen-witness",
                         f"--data input_{LATEST_UUID}.json",
@@ -51,7 +51,7 @@ try:
                 {
                     "artifact": "balancer_fee_model",
                     "binary": "ezkl",
-                    "deployment": "0195a9d3-6efb-7597-b846-3547ff9424b7",
+                    "deployment": DEPLOYMENT_NAME,
                     "command": [
                         "prove",
                         f"--witness witness_{LATEST_UUID}.json",

@@ -6,67 +6,61 @@ COCSwap is a suite of tools to help LPs make more money by allowing the use of v
 
 ![image](./img.jpg)
 
-## Dynamic Fee Demo
-[Youtube Video](https://youtu.be/RHvnQFJXk0U)
-
 ## 🐔 COCSwap Features
 1. Relies on [ezkl](https://github.com/zkonduit/ezkl) for verifiable offchain compute and inference. ZKML allow proprietary models to remain private. People can get the performance of the model by backtesting the ZKML models. Currently, EZKL helps update contract hyperparams in an async way.
 
-2. Customizable Dynamic Fee Hook (EZKLDynamicFeeHook)
+2. Dynamic Fee Manager [In Production]
 
-3. Dynamically Weighted Pool (COCSwapPool)
+3. Dynamically Weighted Pool (COCSwapPool) [TBD]
 
-4. Boosted Pools if eligible via Balancer
+## Dynamic Fee Manager
 
-5. (TODO) Hijacking user data field to modify add/remove liquidity and swaps.
+The Dynamic Fee Manager works as follows
 
-## Base Contract Deployment
+- Cache Chainlink Oracle Price Data in the PriceCache contract.
 
+- Pass the Historical Price Data to a EZKL ZK Circuit to generate a witness and proof for the optimal fee.
+
+- Take the proof and optimal fee and pass it to the relevant pool via `FeeManager.setStaticSwapFeePercentage`
+
+### Dynamic Fee Demo
+[Youtube Video](https://youtu.be/RHvnQFJXk0U)
+
+
+### Quickstart
+
+1. Deploy a Pool on Balancer
+
+2. In the Swap Fee Manager field set it to the Fee Manager Address listed below.
+
+3. Call `FeeManager.registerFeeConfig` with the appropriate parameters. Set `_verifier` to the right verifier.
+
+**Note 1:** `_scalingFactorDiv` is calculated via `2^param scale` via the circuit settings.
+`_scalingFactorMul` is needed to correct the values to the appropriate ranges as `FixedPoint.ONE` is `1e18` on Balancer.
+
+**Note 2:** Currently this function is gated via the EZKL team, DM jseam or other EZKL core team members to get a pool included.
+
+4. Run `packages/foundry/contracts/utils/cronjob.py`. You will also need to set the right secrets in `secrets.py`. This script is used to call `ChainlinkPriceCache.update` and to call `FeeManager.setStaticSwapFeePercentage`.
+
+**Note:** You may also DM jseam or other EZKL core team members to include the address into the existing running cronjob script.
+
+### Base Contract Deployment
+
+#### Price Cache
 - [ChainlinkPriceCache](https://basescan.org/address/0x74F1e0C70B9C40CaEc42Bb098D125197FB4E7213) `0x74F1e0C70B9C40CaEc42Bb098D125197FB4E7213`
 
-### ETH/USD Dynamic Fee Pool via Admin
-**Note** After deploying the pool, register it with the FeeManager. Make sure to +1 in the lookback periods
+#### ETH/USD Fee Manager
+- [FeeManager](https://basescan.org/address/0x9CFf5B653DF0429933763Bb92345D074Aa9b0622) `0x9CFf5B653DF0429933763Bb92345D074Aa9b0622`
 
-#### Pool 1
-- OLD ~~[Halo2Verifier](https://basescan.org/address/0x0E9F451ed95Bf889b340FF8a63263d642dE12042) `0x0E9F451ed95Bf889b340FF8a63263d642dE12042`~~
+#### ETH/USD Dynamic Fee Verifier
+- [ETHUSDDynamicFeeVerifier](https://basescan.org/address/0x5A003cAdBCf4db875246fA5785faC427c2D766Db) `0x5A003cAdBCf4db875246fA5785faC427c2D766Db`
 
-- [Halo2Verifier](https://basescan.org/address/0x9200214D7dA239890f3d4c353d119B5ed6A1A136) `0x9200214D7dA239890f3d4c353d119B5ed6A1A136`
-
-- OLD ~~[FeeManager](https://basescan.org/address/0x4Bd930eAC99B23b8Cb7a83EEAdb06e3265b4Ca4f) `0x4Bd930eAC99B23b8Cb7a83EEAdb06e3265b4Ca4f`~~
-
-- OLD ~~[FeeManager](https://basescan.org/address/0x25E273Fa0893FCf4F3Fb920e15c933715D078e7d) `0x25E273Fa0893FCf4F3Fb920e15c933715D078e7d`~~
-
-- OLD ~~[FeeManager](https://basescan.org/address/0xEFF3BB1f780D741446d6e376Afe1BD580FBc2F39) `0xEFF3BB1f780D741446d6e376Afe1BD580FBc2F39`~~
-
-- OLD ~~[FeeManager](https://basescan.org/address/0xB503410d20DF3d389d57D5513263e77e003f15aa) `0xB503410d20DF3d389d57D5513263e77e003f15aa`~~
-
-- OLD ~~[FeeManager](https://basescan.org/address/0x4571fB772Dd584e1c8d87e43B793C696c541f68C) `0x4571fB772Dd584e1c8d87e43B793C696c541f68C`~~
-
-- [FeeManager](https://basescan.org/address/0x029521841aD44633446BBcAe0B703e49ca1E951D) `0x029521841aD44633446BBcAe0B703e49ca1E951D`
+#### Gryo E-CLP Pool
+- [EZKL Gyro E-CLP Pool ysUSDC-waBasWETH Boosted Pool](https://balancer.fi/pools/base/v3/0xe0AFFb1e0EF262B0e2427515504f4A5e4B288c62) `0xe0AFFb1e0EF262B0e2427515504f4A5e4B288c62`
 
 
-
-- OLD ~~[EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x08C16E2872807520b1DF569588A6B771B331cBAb) `0x08C16E2872807520b1DF569588A6B771B331cBAb`~~
-
-- OLD ~~[EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x7530820AfAe29C2fbA80ffF49F80E5bAA75dd986) `0x7530820AfAe29C2fbA80ffF49F80E5bAA75dd986`~~
-
-- OLD ~~[EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x5dF21B950adc28C56FF3483EcE3c2D559626d756) `0x5dF21B950adc28C56FF3483EcE3c2D559626d756`~~
-
-- OLD ~~[EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x683F03C4B4201C1aB70715e38d79a2E49DB12488) `0x683F03C4B4201C1aB70715e38d79a2E49DB12488`~~
-
-- OLD ~~[EZKL Bosteed ETH/USD Pool](https://balancer.fi/pools/base/v3/0xAa1C578C0D5901E1CE857bBcc6dF641FdCC2903a) `0xAa1C578C0D5901E1CE857bBcc6dF641FdCC2903a`~~
-
-- OLD ~~[EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x1007551886097eA9d0fd9A0102C74A999264Ce3c) `0x1007551886097eA9d0fd9A0102C74A999264Ce3c`~~
-
-- OLD ~~[EZKL Boosted ETH/USD Pool](https://balancer.fi/pools/base/v3/0x3f234FF6fa543Eafd8a7f3E628f979d61369e076) `0x3f234FF6fa543Eafd8a7f3E628f979d61369e076`~~
-
-- [EZKL ETH/USD Pool](https://balancer.fi/pools/base/v3/0x4d4c2e48188dfe6fa177aee0d6a21ab23277383a) `0x4d4c2e48188dfe6fa177aee0d6a21ab23277383a`
-
-
-### COCSwapPools
+## COCSwapPools
 - TBD
-
-## Contract Deployments
 
 ## ✨ Features
 

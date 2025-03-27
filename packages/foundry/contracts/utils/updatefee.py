@@ -1,4 +1,7 @@
-
+"""
+Utility contract to test the update fee logic. This is mostly meant for testing purposes.
+Use cronjob.py for production.
+"""
 import time
 import json
 import logging
@@ -107,7 +110,7 @@ def call_lilith(output_data):
                     {
                         "artifact": "balancer_fee_model",
                         "binary": "ezkl",
-                        "deployment": "0195a9d3-6efb-7597-b846-3547ff9424b7",
+                        "deployment": "0195d1ec-e714-72e4-baef-578131cc7f39",
                         "command": [
                             "gen-witness",
                             f"--data input_{latest_uuid}.json",
@@ -118,7 +121,7 @@ def call_lilith(output_data):
                     {
                         "artifact": "balancer_fee_model",
                         "binary": "ezkl",
-                        "deployment": "0195a9d3-6efb-7597-b846-3547ff9424b7",
+                        "deployment": "0195d1ec-e714-72e4-baef-578131cc7f39",
                         "command": [
                             "prove",
                             f"--witness witness_{latest_uuid}.json",
@@ -210,7 +213,7 @@ def update_fee():
         account = w3.eth.account.from_key(WALLET_PRIVATE_KEY)
         
         # Get historical prices and generate proof
-        historical_prices = get_historical_prices(w3, secrets.CONTRACT_ADDRESS, 337)
+        historical_prices = get_historical_prices(w3, secrets.CACHE_CONTRACT_ADDRESS, 337)
 
         if not historical_prices:
             logger.error("Failed to get historical prices. Cannot update hook.")
