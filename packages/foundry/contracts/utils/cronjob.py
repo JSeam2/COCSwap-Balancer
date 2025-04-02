@@ -42,6 +42,9 @@ FEE_MANAGER_ABI = json.loads('''
 # Lilith configuration
 ARCHON_URL = secrets.ARCHON_URL
 ARCHON_API_KEY = secrets.ARCHON_API_KEY
+ARCHON_USER_ID = secrets.ARCHON_USER_ID
+ARCHON_ARTIFACT = secrets.ARCHON_ARTIFACT
+ARCHON_DEPLOYMENT = secrets.ARCHON_DEPLOYMENT
 
 # RPC configuration
 ETHEREUM_NODE_URL = secrets.ETHEREUM_NODE_URL
@@ -73,8 +76,6 @@ class ContractUpdater:
             node_url,
             wallet_address,
             private_key,
-            archon_url,
-            archon_api_key,
         ):
         try:
             logger.info(f"Connecting to Ethereum node at {node_url}")
@@ -106,10 +107,6 @@ class ContractUpdater:
             self.wallet_address = Web3.to_checksum_address(wallet_address)
             logger.info(f"Using wallet address: {self.wallet_address}")
             self.private_key = private_key
-
-            # setup archon
-            self.archon_url = archon_url
-            self.archon_api_key = archon_api_key
 
             # Check wallet balance
             balance = self.w3.eth.get_balance(self.wallet_address)
@@ -175,15 +172,22 @@ class ContractUpdater:
     def call_update(self, retry_count=0):
         """Call the update function on the contract with gas price adjustments on retries"""
         try:
-            # Get base gas price
-            base_gas_price = self.w3.eth.gas_price
+            # Get latest block info
+            latest_block = self.w3.eth.get_block("latest")
+            base_fee_per_gas = latest_block.get('baseFeePerGas', self.w3.eth.gas_price)
             
-            # Apply gas price multiplier based on retry count (10% increase per retry)
-            multiplier = 1.0 + (retry_count * 0.2)  # 20% increase per retry
-            gas_price = int(base_gas_price * multiplier)
+            # Calculate max priority fee per gas (tip)
+            # Start with 1.5 Gwei and increase based on retry count
+            priority_fee_base = self.w3.to_wei(1.5, 'gwei')
+            priority_multiplier = 1.0 + (retry_count * 0.2)  # 20% increase per retry
+            max_priority_fee_per_gas = int(priority_fee_base * priority_multiplier)
             
-            gas_price_gwei = self.w3.from_wei(gas_price, 'gwei')
-            logger.info(f"Using gas price: {gas_price_gwei} Gwei (retry {retry_count}, multiplier {multiplier:.2f}x)")
+            # Calculate max fee per gas 
+            # Formula: baseFeePerGas * buffer + maxPriorityFeePerGas
+            buffer = 1.2 + (retry_count * 0.1)  # Buffer increases with retries
+            max_fee_per_gas = int(base_fee_per_gas * buffer) + max_priority_fee_per_gas
+            
+            logger.info(f"Using max fee: {self.w3.from_wei(max_fee_per_gas, 'gwei')} Gwei, max priority fee: {self.w3.from_wei(max_priority_fee_per_gas, 'gwei')} Gwei (retry {retry_count})")
 
             # Get the transaction count for nonce
             nonce = self.w3.eth.get_transaction_count(self.wallet_address)
@@ -194,12 +198,14 @@ class ContractUpdater:
             gas_limit = 130000  # Fixed gas limit that should be sufficient for most update calls
             logger.info(f"Using fixed gas limit: {gas_limit}")
 
-            # Build the transaction with fixed gas limit and adjusted gas price
+            # Build the transaction with fixed gas limit and EIP-1559 gas parameters
             tx = self.cache_contract.functions.update().build_transaction({
                 'from': self.wallet_address,
                 'nonce': nonce,
                 'gas': gas_limit,
-                'gasPrice': gas_price,
+                'maxFeePerGas': max_fee_per_gas,
+                'maxPriorityFeePerGas': max_priority_fee_per_gas,
+                'type': 2,  # EIP-1559 transaction type
                 'chainId': self.w3.eth.chain_id,
             })
 
@@ -323,17 +329,17 @@ class ContractUpdater:
 
         try:
             res = requests.post(
-                url=f"{self.archon_url}/recipe?user_id=8c9f812f-b85e-47d6-9fca-c4f9b34622b7",
+                url=f"{ARCHON_URL}/recipe?user_id={ARCHON_USER_ID}",
                 headers={
-                    "X-API-KEY": self.archon_api_key,
+                    "X-API-KEY": ARCHON_API_KEY,
                     "Content-Type": "application/json",
                 },
                 json={
                     "commands": [
                         {
-                            "artifact": "balancer_fee_model",
+                            "artifact": ARCHON_ARTIFACT,
                             "binary": "ezkl",
-                            "deployment": "0195d1ec-e714-72e4-baef-578131cc7f39",
+                            "deployment": ARCHON_DEPLOYMENT,
                             "command": [
                                 "gen-witness",
                                 f"--data input_{latest_uuid}.json",
@@ -342,9 +348,9 @@ class ContractUpdater:
                             ],
                         },
                         {
-                            "artifact": "balancer_fee_model",
+                            "artifact": ARCHON_ARTIFACT,
                             "binary": "ezkl",
-                            "deployment": "0195d1ec-e714-72e4-baef-578131cc7f39",
+                            "deployment": ARCHON_DEPLOYMENT,
                             "command": [
                                 "prove",
                                 f"--witness witness_{latest_uuid}.json",
@@ -382,9 +388,9 @@ class ContractUpdater:
                     # get job status
                     # pass id to client so client polls
                     res = requests.get(
-                        url=f"{self.archon_url}/recipe/{str(cluster_id)}?user_id=8c9f812f-b85e-47d6-9fca-c4f9b34622b7",
+                        url=f"{ARCHON_URL}/recipe/{str(cluster_id)}?user_id={ARCHON_USER_ID}",
                         headers={
-                            "X-API-KEY": self.archon_api_key,
+                            "X-API-KEY": ARCHON_API_KEY,
                         }
                     )
                     res.raise_for_status()
@@ -427,15 +433,22 @@ class ContractUpdater:
     def call_update_fee(self, retry_count=0):
         """Call the update function on the contract with gas price adjustments on retries"""
         try:
-            # Get base gas price
-            base_gas_price = self.w3.eth.gas_price
-
-            # Apply gas price multiplier based on retry count (10% increase per retry)
-            multiplier = 1.0 + (retry_count * 0.2)  # 20% increase per retry
-            gas_price = int(base_gas_price * multiplier)
-
-            gas_price_gwei = self.w3.from_wei(gas_price, 'gwei')
-            logger.info(f"Using gas price: {gas_price_gwei} Gwei (retry {retry_count}, multiplier {multiplier:.2f}x)")
+            # Get latest block info
+            latest_block = self.w3.eth.get_block("latest")
+            base_fee_per_gas = latest_block.get('baseFeePerGas', self.w3.eth.gas_price)
+            
+            # Calculate max priority fee per gas (tip)
+            # Start with 1.5 Gwei and increase based on retry count
+            priority_fee_base = self.w3.to_wei(1.5, 'gwei')
+            priority_multiplier = 1.0 + (retry_count * 0.2)  # 20% increase per retry
+            max_priority_fee_per_gas = int(priority_fee_base * priority_multiplier)
+            
+            # Calculate max fee per gas 
+            # Formula: baseFeePerGas * buffer + maxPriorityFeePerGas
+            buffer = 1.2 + (retry_count * 0.1)  # Buffer increases with retries
+            max_fee_per_gas = int(base_fee_per_gas * buffer) + max_priority_fee_per_gas
+            
+            logger.info(f"Using max fee: {self.w3.from_wei(max_fee_per_gas, 'gwei')} Gwei, max priority fee: {self.w3.from_wei(max_priority_fee_per_gas, 'gwei')} Gwei (retry {retry_count})")
 
             # Get the transaction count for nonce
             nonce = self.w3.eth.get_transaction_count(self.wallet_address)
@@ -446,7 +459,7 @@ class ContractUpdater:
             gas_limit = 30000000  # Fixed gas limit that should be sufficient for most update calls
             logger.info(f"Using fixed gas limit: {gas_limit}")
 
-            # Build the transaction with fixed gas limit and adjusted gas price
+            # Build the transaction with fixed gas limit and EIP-1559 gas parameters
             tx = self.fee_manager_contract.functions.setStaticSwapFeePercentage(
                 self.pool_contract_address,
                 self.proof,
@@ -455,7 +468,9 @@ class ContractUpdater:
                 'from': self.wallet_address,
                 'nonce': nonce,
                 'gas': gas_limit,
-                'gasPrice': gas_price,
+                'maxFeePerGas': max_fee_per_gas,
+                'maxPriorityFeePerGas': max_priority_fee_per_gas,
+                'type': 2,  # EIP-1559 transaction type
                 'chainId': self.w3.eth.chain_id,
             })
 
@@ -759,6 +774,9 @@ def main():
             'WALLET_ADDRESS',
             'ARCHON_URL',
             'ARCHON_API_KEY',
+            'ARCHON_USER_ID',
+            'ARCHON_ARTIFACT',
+            'ARCHON_DEPLOYMENT'
         ]
         missing_vars = []
 
@@ -779,9 +797,6 @@ def main():
             ETHEREUM_NODE_URL,
             WALLET_ADDRESS,
             WALLET_PRIVATE_KEY,
-            ARCHON_URL,
-            ARCHON_API_KEY
-
         )
         
         updater.run()

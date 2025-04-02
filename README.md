@@ -49,16 +49,22 @@ The Dynamic Fee Manager works as follows
 ### Base Contract Deployment
 
 #### Price Cache
-- [ChainlinkPriceCache](https://basescan.org/address/0x74F1e0C70B9C40CaEc42Bb098D125197FB4E7213) `0x74F1e0C70B9C40CaEc42Bb098D125197FB4E7213`
+- [ETH/USD ChainlinkPriceCache](https://basescan.org/address/0x74F1e0C70B9C40CaEc42Bb098D125197FB4E7213) `0x74F1e0C70B9C40CaEc42Bb098D125197FB4E7213`
+- [WBTC/USD ChainlinkPriceCache](https://basescan.org/address/0x69f15CCad7bD060c00E2116946d43F0d2Abd80B7) `0x69f15CCad7bD060c00E2116946d43F0d2Abd80B7`
 
-#### ETH/USD Fee Manager
+#### Fee Manager
 - [FeeManager](https://basescan.org/address/0x9CFf5B653DF0429933763Bb92345D074Aa9b0622) `0x9CFf5B653DF0429933763Bb92345D074Aa9b0622`
 
-#### ETH/USD Dynamic Fee Verifier
+#### Dynamic Fee Verifier
 - [ETHUSDDynamicFeeVerifier](https://basescan.org/address/0x5A003cAdBCf4db875246fA5785faC427c2D766Db) `0x5A003cAdBCf4db875246fA5785faC427c2D766Db`
+
+- [BTCUSDDynamicFeeVerifier](https://basescan.org/address/0x1315b97065a6E02DA0406f13a9fd5BCE0e7f338a) `0x1315b97065a6E02DA0406f13a9fd5BCE0e7f338a`
 
 #### Gryo E-CLP Pool
 - [EZKL Gyro E-CLP Pool ysUSDC-waBasWETH Boosted Pool](https://balancer.fi/pools/base/v3/0xe0AFFb1e0EF262B0e2427515504f4A5e4B288c62) `0xe0AFFb1e0EF262B0e2427515504f4A5e4B288c62`
+
+- [EZKL Gyro E-CLP Pool USDC-cbBTC Pool](https://balancer.fi/pools/base/v3/0x1aE96B5A7Ccb602C51228729E4EF07f8e5Cf0557) `0x1aE96B5A7Ccb602C51228729E4EF07f8e5Cf0557`
+
 
 
 ## COCSwapPools
