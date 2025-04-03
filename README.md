@@ -61,10 +61,11 @@ The Dynamic Fee Manager works as follows
 - [BTCUSDDynamicFeeVerifier](https://basescan.org/address/0x1315b97065a6E02DA0406f13a9fd5BCE0e7f338a) `0x1315b97065a6E02DA0406f13a9fd5BCE0e7f338a`
 
 #### Gryo E-CLP Pool
-- [EZKL Gyro E-CLP Pool ysUSDC-waBasWETH Boosted Pool](https://balancer.fi/pools/base/v3/0xe0AFFb1e0EF262B0e2427515504f4A5e4B288c62) `0xe0AFFb1e0EF262B0e2427515504f4A5e4B288c62`
+- ~~[EZKL Gyro E-CLP Pool ysUSDC-waBasWETH Boosted Pool](https://balancer.fi/pools/base/v3/0xe0AFFb1e0EF262B0e2427515504f4A5e4B288c62) `0xe0AFFb1e0EF262B0e2427515504f4A5e4B288c62`~~
 
 - [EZKL Gyro E-CLP Pool USDC-cbBTC Pool](https://balancer.fi/pools/base/v3/0x1aE96B5A7Ccb602C51228729E4EF07f8e5Cf0557) `0x1aE96B5A7Ccb602C51228729E4EF07f8e5Cf0557`
 
+- [WETH-USDC-EZKL](https://balancer.fi/pools/base/v3/0x81a85b9ec797110f2ee665c119e8f28a2456d6f1) `0x81a85b9ec797110f2ee665c119e8f28a2456d6f1`
 
 
 ## COCSwapPools
