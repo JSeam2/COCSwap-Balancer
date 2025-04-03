@@ -439,7 +439,7 @@ class ContractUpdater:
             
             # Calculate max priority fee per gas (tip)
             # Start with 1.5 Gwei and increase based on retry count
-            priority_fee_base = self.w3.to_wei(1.5, 'gwei')
+            priority_fee_base = self.w3.to_wei(0.00136, 'gwei')
             priority_multiplier = 1.0 + (retry_count * 0.2)  # 20% increase per retry
             max_priority_fee_per_gas = int(priority_fee_base * priority_multiplier)
             
