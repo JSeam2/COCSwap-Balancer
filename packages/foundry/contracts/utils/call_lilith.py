@@ -14,7 +14,7 @@ import time
 def call_lilith():
     latest_uuid = str(uuid.uuid4())
 
-    with open("input.json", "r") as f:
+    with open("input_debug.json", "r") as f:
         d = json.load(f)
 
     try:
