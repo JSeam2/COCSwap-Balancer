@@ -33,10 +33,10 @@ CACHE_CONTRACT_ABI = json.loads('''
 [{"inputs":[{"internalType":"string","name":"_description","type":"string"},{"internalType":"address","name":"_oracle","type":"address"},{"internalType":"uint256","name":"_delay","type":"uint256"},{"internalType":"uint256[]","name":"_roundIds","type":"uint256[]"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"InvalidRange","type":"error"},{"inputs":[],"name":"NoDataAvailable","type":"error"},{"inputs":[],"name":"WaitForDelay","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"timestamp","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"price","type":"uint256"}],"name":"Updated","type":"event"},{"inputs":[],"name":"delay","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"description","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"lookback","type":"uint256"}],"name":"getHistoricalPrice","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"start","type":"uint256"},{"internalType":"uint256","name":"end","type":"uint256"}],"name":"getHistoricalPriceRange","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"lookback","type":"uint256"}],"name":"getHistoricalTimestamp","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"start","type":"uint256"},{"internalType":"uint256","name":"end","type":"uint256"}],"name":"getHistoricalTimestampRange","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"latestSnapshotId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"oracle","outputs":[{"internalType":"contract IAggregatorInterface","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"prices","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"timestamps","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"update","outputs":[],"stateMutability":"nonpayable","type":"function"}]
 ''')
 
-POOL_CONTRACT_ADDRESS = secrets.POOL_CONTRACT_ADDRESS
+POOL_CONTRACT_ADDRESSES = secrets.POOL_CONTRACT_ADDRESSES
 FEE_MANAGER_ADDRESS = secrets.FEE_MANAGER_ADDRESS
 FEE_MANAGER_ABI = json.loads('''
-[{"inputs":[{"internalType":"address","name":"_vault","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"FeeTooHigh","type":"error"},{"inputs":[],"name":"InvalidHook","type":"error"},{"inputs":[],"name":"InvalidPool","type":"error"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"OwnableInvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"OwnableUnauthorizedAccount","type":"error"},{"inputs":[],"name":"VerificationFailed","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"pool","type":"address"},{"indexed":false,"internalType":"uint256","name":"swapFeePercentage","type":"uint256"}],"name":"FeeUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"pool","type":"address"},{"indexed":false,"internalType":"address","name":"verifier","type":"address"},{"indexed":false,"internalType":"address","name":"priceCache","type":"address"},{"indexed":false,"internalType":"uint256","name":"lookback","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"scalingFactor","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"initialFee","type":"uint256"}],"name":"NewFeeConfig","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"feeConfig","outputs":[{"internalType":"contract IHalo2Verifier","name":"verifier","type":"address"},{"internalType":"contract IChainlinkPriceCache","name":"priceCache","type":"address"},{"internalType":"uint256","name":"lookback","type":"uint256"},{"internalType":"uint256","name":"scalingFactor","type":"uint256"},{"internalType":"uint256","name":"dynamicFee","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"pool","type":"address"},{"internalType":"address","name":"_verifier","type":"address"},{"internalType":"address","name":"_priceCache","type":"address"},{"internalType":"uint256","name":"_lookback","type":"uint256"},{"internalType":"uint256","name":"_scalingFactor","type":"uint256"},{"internalType":"uint256","name":"_initDynamicFee","type":"uint256"}],"name":"registerFeeConfig","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"pool","type":"address"},{"internalType":"bytes","name":"proof","type":"bytes"},{"internalType":"uint256","name":"dynamicFeeUnscaled","type":"uint256"}],"name":"setStaticSwapFeePercentage","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"vault","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}]
+[{"inputs":[{"internalType":"string","name":"_description","type":"string"},{"internalType":"address","name":"_vault","type":"address"},{"internalType":"address","name":"_priceCache","type":"address"},{"internalType":"address","name":"_verifier","type":"address"},{"internalType":"uint256","name":"_lookback","type":"uint256"},{"internalType":"uint256","name":"_scalingFactorDiv","type":"uint256"},{"internalType":"uint256","name":"_scalingFactorMul","type":"uint256"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"InvalidPool","type":"error"},{"inputs":[],"name":"VerificationFailed","type":"error"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"swapFeePercentage","type":"uint256"}],"name":"FeeUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"pool","type":"address"},{"indexed":false,"internalType":"uint256","name":"swapFeePercentage","type":"uint256"}],"name":"PoolUpdated","type":"event"},{"inputs":[],"name":"description","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"dynamicFee","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lookback","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"priceCache","outputs":[{"internalType":"contract IChainlinkPriceCache","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address[]","name":"pools","type":"address[]"}],"name":"publishFee","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"scalingFactorDiv","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"scalingFactorMul","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes","name":"proof","type":"bytes"},{"internalType":"uint256","name":"dynamicFeeUnscaled","type":"uint256"}],"name":"updateFee","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"vault","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"verifier","outputs":[{"internalType":"contract IHalo2Verifier","name":"","type":"address"}],"stateMutability":"view","type":"function"}]
 ''')
 
 # Lilith configuration
@@ -70,7 +70,7 @@ class ContractUpdater:
             self,
             cache_contract_address,
             cache_contract_abi,
-            pool_contract_address,
+            pool_contract_addresses,
             fee_manager_contract_address,
             fee_manager_contract_abi,
             node_url,
@@ -96,8 +96,8 @@ class ContractUpdater:
             self.cache_contract = self.w3.eth.contract(address=self.cache_contract_address, abi=cache_contract_abi)
 
             # setup pool
-            self.pool_contract_address = Web3.to_checksum_address(pool_contract_address)
-            logger.info(f"Using Pool contract address: {self.pool_contract_address}")
+            self.pool_contract_addresses = [Web3.to_checksum_address(x) for x in pool_contract_addresses]
+            logger.info(f"Using Pool contract address: {self.pool_contract_addresses}")
 
             # setup fee manager
             self.fee_manager_contract_address = Web3.to_checksum_address(fee_manager_contract_address)
@@ -178,7 +178,7 @@ class ContractUpdater:
             
             # Calculate max priority fee per gas (tip)
             priority_fee_base = self.w3.to_wei(0.00136, 'gwei')
-            priority_multiplier = 1.0 + (retry_count * 0.1)
+            priority_multiplier = 1.0 + (retry_count * 0.1)  # 10% increase per retry
             max_priority_fee_per_gas = int(priority_fee_base * priority_multiplier)
             
             # Calculate max fee per gas 
@@ -439,7 +439,7 @@ class ContractUpdater:
             # Calculate max priority fee per gas (tip)
             # Start with 1.5 Gwei and increase based on retry count
             priority_fee_base = self.w3.to_wei(0.00136, 'gwei')
-            priority_multiplier = 1.0 + (retry_count * 0.1)  # 20% increase per retry
+            priority_multiplier = 1.0 + (retry_count * 0.1)  # 10% increase per retry
             max_priority_fee_per_gas = int(priority_fee_base * priority_multiplier)
             
             # Calculate max fee per gas 
@@ -459,8 +459,7 @@ class ContractUpdater:
             logger.info(f"Using fixed gas limit: {gas_limit}")
 
             # Build the transaction with fixed gas limit and EIP-1559 gas parameters
-            tx = self.fee_manager_contract.functions.setStaticSwapFeePercentage(
-                self.pool_contract_address,
+            tx = self.fee_manager_contract.functions.updateFee(
                 self.proof,
                 int(self.instances[-1], 16)
             ).build_transaction({
@@ -482,22 +481,22 @@ class ContractUpdater:
 
             # Send the transaction
             tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-            logger.info(f"setStaticSwapFeePercentage transaction sent: 0x{tx_hash.hex()}")
+            logger.info(f"updateFee transaction sent: 0x{tx_hash.hex()}")
 
             # Wait for transaction receipt with a timeout
             try:
                 receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
-                logger.info(f"setStaticSwapFeePercentage transaction confirmed in block {receipt['blockNumber']}")
+                logger.info(f"updateFee transaction confirmed in block {receipt['blockNumber']}")
 
                 # Check status of transaction
                 if receipt['status'] == 1:
-                    logger.info(f"setStaticSwapFeePercentage Transaction succeeded. Gas used: {receipt['gasUsed']}")
+                    logger.info(f"updateFee Transaction succeeded. Gas used: {receipt['gasUsed']}")
                     return True, None
                 else:
-                    logger.error(f"setStaticSwapFeePercentage Transaction failed. Gas used: {receipt['gasUsed']}")
+                    logger.error(f"updateFee Transaction failed. Gas used: {receipt['gasUsed']}")
                     return False, "Transaction failed"
             except Exception as timeout_error:
-                logger.warning(f"setStaticSwapFeePercentage Transaction may be pending: {str(timeout_error)}")
+                logger.warning(f"updateFee Transaction may be pending: {str(timeout_error)}")
                 return False, "Timeout"
 
         except ContractLogicError as e:
@@ -543,7 +542,7 @@ class ContractUpdater:
 
     def check_recent_fee_update(self):
         """
-        Check if setStaticSwapFeePercentage was called within the last hour
+        Check if updateFee was called within the last hour
         Returns True if a recent update was found, False otherwise
         """
         try:
@@ -558,14 +557,10 @@ class ContractUpdater:
             logger.info(f"FeeUpdated logs: {logs}")
 
             if len(logs) > 0:
-                # TODO check the pool address
-                for log in logs:
-                    if log['args']['pool'] == self.pool_contract_address:
-                        logger.info("Found a recent FeeUpdated event, skipping")
-                        return True
+                return True
 
             else:
-                logger.info("No recent FeeUpdated event, proceed to call setStaticSwapFeePercentage")
+                logger.info("No recent FeeUpdated event, proceed to call updateFee")
                 return False
             
         except Exception as e:
@@ -766,7 +761,7 @@ def main():
         # Check if the secrets file exists and has the required variables
         required_vars = [
             'CACHE_CONTRACT_ADDRESS',
-            'POOL_CONTRACT_ADDRESS',
+            'POOL_CONTRACT_ADDRESSES',
             'FEE_MANAGER_ADDRESS',
             'ETHEREUM_NODE_URL',
             'WALLET_PRIVATE_KEY',
@@ -790,7 +785,7 @@ def main():
         updater = ContractUpdater(
             CACHE_CONTRACT_ADDRESS,
             CACHE_CONTRACT_ABI,
-            POOL_CONTRACT_ADDRESS,
+            POOL_CONTRACT_ADDRESSES,
             FEE_MANAGER_ADDRESS,
             FEE_MANAGER_ABI,
             ETHEREUM_NODE_URL,
