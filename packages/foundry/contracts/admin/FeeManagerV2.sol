@@ -56,8 +56,8 @@ contract FeeManagerV2 {
       address _verifier,
       uint256 _lookback,
       uint256 _scalingFactorDiv,
-      uint256 _scalingFactorMul)
-   {
+      uint256 _scalingFactorMul
+   ) {
       description = _description;
       vault = _vault;
       priceCache = IChainlinkPriceCache(_priceCache);

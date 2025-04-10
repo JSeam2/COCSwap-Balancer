@@ -55,6 +55,10 @@ The Dynamic Fee Manager works as follows
 #### Fee Manager
 - [FeeManager](https://basescan.org/address/0x9CFf5B653DF0429933763Bb92345D074Aa9b0622) `0x9CFf5B653DF0429933763Bb92345D074Aa9b0622`
 
+#### Fee Manager V2
+This is a permissionless version
+- [FeeManagerV2](https://basescan.org/address/0x3064044c66738fFa362DADAf982e148233Ad7CFa) `0x3064044c66738fFa362DADAf982e148233Ad7CFa`
+
 #### Dynamic Fee Verifier
 - [ETHUSDDynamicFeeVerifier](https://basescan.org/address/0x5A003cAdBCf4db875246fA5785faC427c2D766Db) `0x5A003cAdBCf4db875246fA5785faC427c2D766Db`
 

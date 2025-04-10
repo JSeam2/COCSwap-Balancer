@@ -1,6 +1,6 @@
 secrets.py
-secrets.py.ethusd
-secrets.py.btcusd
+secrets.py.ethusd*
+secrets.py.btcusd*
 test
 __pycache__/
 contract_updater.log
