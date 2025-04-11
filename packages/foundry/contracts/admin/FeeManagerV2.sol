@@ -87,9 +87,10 @@ contract FeeManagerV2 {
          revert VerificationFailed();
       }
 
-      // Calculate scaled dynamicFee
-      dynamicFee = (dynamicFeeUnscaled * scalingFactorMul) / scalingFactorDiv;
-
+      // Calculate scaled dynamicFee, we round to 5dp which is 0.00001e18 = 1e13 this is because solvers on Paraswap cannot process too many dp
+      // note 100% is 1e18 as given in FixedPoint.ONE
+      // note in this function we add a 0.5e13 to round up if the remainder is >= 0.5
+      dynamicFee = (((dynamicFeeUnscaled * scalingFactorMul) / scalingFactorDiv) + 0.5e13) / 1e13 * 1e13;
       emit FeeUpdated(dynamicFee);
 
       return true;
