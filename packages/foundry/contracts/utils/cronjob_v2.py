@@ -169,9 +169,71 @@ class ContractUpdater:
         # Return True if current time is at or past the next update time
         return current_time >= (self.next_update_time - UPDATE_WINDOW_BUFFER)
 
+    def simulate_transaction(self, contract_function, tx_params):
+        """
+        Simulate a transaction before sending to check if it will revert
+
+        Args:
+            contract_function: The contract function to call
+            tx_params: Transaction parameters
+
+        Returns:
+            Tuple of (success, error_message)
+        """
+        try:
+            # Create a copy of transaction parameters for simulation
+            sim_params = tx_params.copy()
+
+            # Get the current block for state override
+            block = self.w3.eth.get_block('latest')
+            block_number = block['number']
+
+            logger.info(f"Simulating transaction on block {block_number}")
+
+            # Call the function with eth_call to simulate execution
+            result = contract_function.call(sim_params, block_identifier=block_number)
+
+            # If we reach here, the transaction should succeed
+            logger.info(f"Transaction simulation successful: {result}")
+            return True, None
+
+        except ContractLogicError as e:
+            error_message = str(e)
+            logger.warning(f"Transaction would revert: {error_message}")
+
+            # Custom contract error handling - return the specific error
+            if ERROR_WAIT_FOR_DELAY in error_message:
+                return False, "WaitForDelay"
+            elif ERROR_INVALID_RANGE in error_message:
+                return False, "InvalidRange"
+            elif ERROR_NO_DATA_AVAILABLE in error_message:
+                return False, "NoDataAvailable"
+            else:
+                return False, error_message
+
+        except Exception as e:
+            logger.error(f"Error simulating transaction: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return False, str(e)
+
     def call_update(self, retry_count=0):
         """Call the update function on the contract with gas price adjustments on retries"""
         try:
+            # First simulate the transaction to check if it would succeed
+            update_fn = self.cache_contract.functions.update()
+            
+            # Create simulation parameters
+            sim_params = {'from': self.wallet_address}
+            
+            # Simulate the transaction
+            success, error = self.simulate_transaction(update_fn, sim_params)
+            
+            if not success:
+                logger.warning(f"Transaction simulation failed: {error}")
+                return False, error
+                
+            logger.info("Transaction simulation successful, proceeding with actual transaction")
+
             # Get latest block info
             latest_block = self.w3.eth.get_block("latest")
             base_fee_per_gas = latest_block.get('baseFeePerGas', self.w3.eth.gas_price)
@@ -198,7 +260,7 @@ class ContractUpdater:
             logger.info(f"Using fixed gas limit: {gas_limit}")
 
             # Build the transaction with fixed gas limit and EIP-1559 gas parameters
-            tx = self.cache_contract.functions.update().build_transaction({
+            tx = update_fn.build_transaction({
                 'from': self.wallet_address,
                 'nonce': nonce,
                 'gas': gas_limit,
@@ -432,6 +494,24 @@ class ContractUpdater:
     def call_update_fee(self, retry_count=0):
         """Call the update function on the contract with gas price adjustments on retries"""
         try:
+            # First simulate the transaction to check if it would succeed
+            update_fee_fn = self.fee_manager_contract.functions.updateFee(
+                self.proof,
+                int(self.instances[-1], 16)
+            )
+            
+            # Create simulation parameters
+            sim_params = {'from': self.wallet_address}
+            
+            # Simulate the transaction
+            success, error = self.simulate_transaction(update_fee_fn, sim_params)
+            
+            if not success:
+                logger.warning(f"Transaction simulation failed: {error}")
+                return False, error
+                
+            logger.info("Transaction simulation successful, proceeding with actual transaction")
+            
             # Get latest block info
             latest_block = self.w3.eth.get_block("latest")
             base_fee_per_gas = latest_block.get('baseFeePerGas', self.w3.eth.gas_price)
@@ -459,10 +539,7 @@ class ContractUpdater:
             logger.info(f"Using fixed gas limit: {gas_limit}")
 
             # Build the transaction with fixed gas limit and EIP-1559 gas parameters
-            tx = self.fee_manager_contract.functions.updateFee(
-                self.proof,
-                int(self.instances[-1], 16)
-            ).build_transaction({
+            tx = update_fee_fn.build_transaction({
                 'from': self.wallet_address,
                 'nonce': nonce,
                 'gas': gas_limit,
@@ -535,7 +612,7 @@ class ContractUpdater:
                 logger.error(f"Traceback: {traceback.format_exc()}")
                 return False, "BadRequest"
             else:
-                logger.error(f"Error calling setStaticSwapFeePercentage function: {error_message}")
+                logger.error(f"Error calling updateFee function: {error_message}")
                 logger.error(f"Traceback: {traceback.format_exc()}")
                 return False, str(e)
 
@@ -627,6 +704,28 @@ class ContractUpdater:
 
                     # Check if there's an update in the mempool
                     if not self.check_update_in_progress():
+                        # First, simulate the transaction to check if it would succeed
+                        # This helps us avoid gas costs for transactions that will definitely fail
+                        update_fn = self.cache_contract.functions.update()
+                        sim_params = {'from': self.wallet_address}
+                        sim_success, sim_error = self.simulate_transaction(update_fn, sim_params)
+                        
+                        if not sim_success:
+                            if sim_error == "WaitForDelay":
+                                # If WaitForDelay error, calculate better wait time
+                                current_time = int(time.time())
+                                time_to_update = max(0, self.next_update_time - current_time)
+                                
+                                if time_to_update > 0:
+                                    logger.info(f"Simulation showed WaitForDelay error. Next valid update in {time_to_update} seconds.")
+                                    # Don't retry until time has passed, continue to fee update check
+                                    # The next loop iteration will try again
+                                    continue
+                            else:
+                                logger.warning(f"Simulation failed with error: {sim_error}. Attempting actual transaction in case simulation is inaccurate.")
+                        else:
+                            logger.info("Transaction simulation successful, proceeding with actual transaction")
+                        
                         # Try to update until successful or max retries reached
                         while not update_successful and retries < MAX_RETRIES:
                             # Call update function with retry count
@@ -711,6 +810,8 @@ class ContractUpdater:
                                         logger.info("Successfully updated fee")
                                     else:
                                         logger.error(f"Failed to update fee: {error}")
+                                        # If the error is something we can recover from by waiting, 
+                                        # the loop will continue and retry later
                                 else:
                                     logger.error("Failed to get proof from Lilith")
                             else:
