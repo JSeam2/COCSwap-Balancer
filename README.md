@@ -74,6 +74,7 @@ This is a permissionless version
 
 - [WETH-USDC-EZKL](https://balancer.fi/pools/base/v3/0x81a85b9ec797110f2ee665c119e8f28a2456d6f1) `0x81a85b9ec797110f2ee665c119e8f28a2456d6f1`
 
+- [WBTC-USDC](https://balancer.fi/pools/base/v3/0x1aE96B5A7Ccb602C51228729E4EF07f8e5Cf0557) `0x1aE96B5A7Ccb602C51228729E4EF07f8e5Cf0557`
 
 ## COCSwapPools
 - TBD
