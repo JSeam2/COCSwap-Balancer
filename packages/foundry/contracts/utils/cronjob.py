@@ -169,6 +169,53 @@ class ContractUpdater:
         # Return True if current time is at or past the next update time
         return current_time >= (self.next_update_time - UPDATE_WINDOW_BUFFER)
 
+    def simulate_transaction(self, contract_function, tx_params):
+        """
+        Simulate a transaction before sending to check if it will revert
+        
+        Args:
+            contract_function: The contract function to call
+            tx_params: Transaction parameters
+            
+        Returns:
+            Tuple of (success, error_message)
+        """
+        try:
+            # Create a copy of transaction parameters for simulation
+            sim_params = tx_params.copy()
+            
+            # Get the current block for state override
+            block = self.w3.eth.get_block('latest')
+            block_number = block['number']
+            
+            logger.info(f"Simulating transaction on block {block_number}")
+            
+            # Call the function with eth_call to simulate execution
+            result = contract_function.call(sim_params, block_identifier=block_number)
+            
+            # If we reach here, the transaction should succeed
+            logger.info(f"Transaction simulation successful: {result}")
+            return True, None
+            
+        except ContractLogicError as e:
+            error_message = str(e)
+            logger.warning(f"Transaction would revert: {error_message}")
+            
+            # Custom contract error handling - return the specific error
+            if ERROR_WAIT_FOR_DELAY in error_message:
+                return False, "WaitForDelay"
+            elif ERROR_INVALID_RANGE in error_message:
+                return False, "InvalidRange"
+            elif ERROR_NO_DATA_AVAILABLE in error_message:
+                return False, "NoDataAvailable"
+            else:
+                return False, error_message
+                
+        except Exception as e:
+            logger.error(f"Error simulating transaction: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return False, str(e)
+
     def call_update(self, retry_count=0):
         """Call the update function on the contract with gas price adjustments on retries"""
         try:
@@ -178,12 +225,12 @@ class ContractUpdater:
             
             # Calculate max priority fee per gas (tip)
             priority_fee_base = self.w3.to_wei(0.00136, 'gwei')
-            priority_multiplier = 1.0 + (retry_count * 0.1)
+            priority_multiplier = 1.0 + (retry_count * 0.2)
             max_priority_fee_per_gas = int(priority_fee_base * priority_multiplier)
             
             # Calculate max fee per gas 
             # Formula: baseFeePerGas * buffer + maxPriorityFeePerGas
-            buffer = 1.2 + (retry_count * 0.1)  # Buffer increases with retries
+            buffer = 1.2 + (retry_count * 0.2)  # Buffer increases with retries
             max_fee_per_gas = int(base_fee_per_gas * buffer) + max_priority_fee_per_gas
             
             logger.info(f"Using max fee: {self.w3.from_wei(max_fee_per_gas, 'gwei')} Gwei, max priority fee: {self.w3.from_wei(max_priority_fee_per_gas, 'gwei')} Gwei (retry {retry_count})")
@@ -197,8 +244,8 @@ class ContractUpdater:
             gas_limit = 130000  # Fixed gas limit that should be sufficient for most update calls
             logger.info(f"Using fixed gas limit: {gas_limit}")
 
-            # Build the transaction with fixed gas limit and EIP-1559 gas parameters
-            tx = self.cache_contract.functions.update().build_transaction({
+            # Build the transaction parameters
+            tx_params = {
                 'from': self.wallet_address,
                 'nonce': nonce,
                 'gas': gas_limit,
@@ -206,8 +253,22 @@ class ContractUpdater:
                 'maxPriorityFeePerGas': max_priority_fee_per_gas,
                 'type': 2,  # EIP-1559 transaction type
                 'chainId': self.w3.eth.chain_id,
-            })
-
+            }
+            
+            # Simulate the transaction first
+            logger.info("Simulating update transaction before sending...")
+            sim_success, sim_error = self.simulate_transaction(
+                self.cache_contract.functions.update(),
+                tx_params
+            )
+            
+            if not sim_success:
+                logger.warning(f"Transaction simulation failed: {sim_error}")
+                return False, sim_error
+                
+            # If simulation succeeds, build and send the real transaction
+            tx = self.cache_contract.functions.update().build_transaction(tx_params)
+            
             # Debug transaction details
             logger.debug(f"update transaction details: {tx}")
 
@@ -439,12 +500,12 @@ class ContractUpdater:
             # Calculate max priority fee per gas (tip)
             # Start with 1.5 Gwei and increase based on retry count
             priority_fee_base = self.w3.to_wei(0.00136, 'gwei')
-            priority_multiplier = 1.0 + (retry_count * 0.1)  # 20% increase per retry
+            priority_multiplier = 1.0 + (retry_count * 0.2)  # 20% increase per retry
             max_priority_fee_per_gas = int(priority_fee_base * priority_multiplier)
             
             # Calculate max fee per gas 
             # Formula: baseFeePerGas * buffer + maxPriorityFeePerGas
-            buffer = 1.2 + (retry_count * 0.1)  # Buffer increases with retries
+            buffer = 1.2 + (retry_count * 0.2)  # Buffer increases with retries
             max_fee_per_gas = int(base_fee_per_gas * buffer) + max_priority_fee_per_gas
             
             logger.info(f"Using max fee: {self.w3.from_wei(max_fee_per_gas, 'gwei')} Gwei, max priority fee: {self.w3.from_wei(max_priority_fee_per_gas, 'gwei')} Gwei (retry {retry_count})")
@@ -458,12 +519,8 @@ class ContractUpdater:
             gas_limit = 30000000  # Fixed gas limit that should be sufficient for most update calls
             logger.info(f"Using fixed gas limit: {gas_limit}")
 
-            # Build the transaction with fixed gas limit and EIP-1559 gas parameters
-            tx = self.fee_manager_contract.functions.setStaticSwapFeePercentage(
-                self.pool_contract_address,
-                self.proof,
-                int(self.instances[-1], 16)
-            ).build_transaction({
+            # Build the transaction parameters
+            tx_params = {
                 'from': self.wallet_address,
                 'nonce': nonce,
                 'gas': gas_limit,
@@ -471,7 +528,29 @@ class ContractUpdater:
                 'maxPriorityFeePerGas': max_priority_fee_per_gas,
                 'type': 2,  # EIP-1559 transaction type
                 'chainId': self.w3.eth.chain_id,
-            })
+            }
+            
+            # Simulate the transaction first
+            logger.info("Simulating setStaticSwapFeePercentage transaction before sending...")
+            sim_success, sim_error = self.simulate_transaction(
+                self.fee_manager_contract.functions.setStaticSwapFeePercentage(
+                    self.pool_contract_address,
+                    self.proof,
+                    int(self.instances[-1], 16)
+                ),
+                tx_params
+            )
+            
+            if not sim_success:
+                logger.warning(f"Transaction simulation failed: {sim_error}")
+                return False, sim_error
+            
+            # If simulation succeeds, build and send the real transaction
+            tx = self.fee_manager_contract.functions.setStaticSwapFeePercentage(
+                self.pool_contract_address,
+                self.proof,
+                int(self.instances[-1], 16)
+            ).build_transaction(tx_params)
 
             # Debug transaction details
             logger.debug(f"Transaction details: {tx}")
