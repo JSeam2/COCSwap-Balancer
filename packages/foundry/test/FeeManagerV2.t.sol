@@ -3,6 +3,7 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
+import { console } from "forge-std/console.sol";
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
@@ -183,6 +184,41 @@ contract FeeManagerV2Test is Test {
         // Verify the fee was set on the last pool (we can only check the most recent call)
         assertEq(mockVaultAdmin.lastPool(), pools[pools.length - 1], "Last pool address not set correctly on vault");
         assertEq(mockVaultAdmin.lastSwapFeePercentage(), expectedFee, "Fee not set correctly on vault");
+    }
+
+    function testUpdateFeeRounding(uint256 fee) public {
+        // The model will not produce a large fee so we can avoid fuzzing too large values
+        // If the fee is too large it will simply fail to pass the balancer vault checks.
+        if (fee > 1e18) {
+            return;
+        }
+
+        // Setup mock behavior to return historical prices
+        uint256[] memory historical = new uint256[](LOOKBACK);
+
+        vm.mockCall(
+            address(mockPriceCache),
+            abi.encodeWithSelector(IChainlinkPriceCache.getHistoricalPrice.selector, LOOKBACK),
+            abi.encode(historical)
+        );
+
+        // Mock verifier to return true
+        vm.mockCall(
+            address(mockVerifier),
+            abi.encodeWithSelector(IHalo2Verifier.verifyProof.selector),
+            abi.encode(true)
+        );
+
+        bytes memory dummyProof = new bytes(0);
+
+        // Test various inputs and round to 5 dp
+        uint256 scaledFee = (fee * SCALING_FACTOR_MUL) / SCALING_FACTOR_DIV;
+        uint256 expectedRoundedFee = (scaledFee + 5e12) / 1e13 * 1e13;
+        console.logUint(expectedRoundedFee);
+
+        feeManagerV2.updateFee(dummyProof, fee);
+        assertEq(feeManagerV2.dynamicFee(), expectedRoundedFee, "Fee not rounded correctly to 5dp");
+        assertTrue(feeManagerV2.dynamicFee() % 1e13 == 0, "Fee not rounded to 5 decimal places");
     }
 }
 
