@@ -39,9 +39,14 @@ async function getRoundIds() {
     }
     else if (chain == "mainnet") {
       provider = new ethers.providers.JsonRpcProvider(process.env.MAINNET_RPC_URL);
-    } else if (chain == "sepolia") {
+    }
+    else if (chain == "sonic") {
+      provider = new ethers.providers.JsonRpcProvider(process.env.SONIC_RPC_URL);
+    }
+    else if (chain == "sepolia") {
       provider = new ethers.providers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
-    } else {
+    }
+    else {
       console.error("Chain not supported");
       process.exit(1);
     }

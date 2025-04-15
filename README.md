@@ -29,22 +29,25 @@ The Dynamic Fee Manager works as follows
 
 ### Quickstart
 
+#### Deploying Chainlink Price Cache
+
+1. Run `yarn getRoundIds <chain> <delay seconds> <start timestamp> <end timestamp>` to populate the roundIds required to bootstrap the chainlink price cache.
+
+2. Deploy the chainlink price cache with the roundIds and delay.
+
+#### Deploying FeeManagerV2
+
 1. Deploy a Pool on Balancer
 
 2. In the Swap Fee Manager field set it to the Fee Manager Address listed below.
-
-3. Call `FeeManager.registerFeeConfig` with the appropriate parameters. Set `_verifier` to the right verifier.
 
 **Note 1:** `_scalingFactorDiv` is calculated via `2^param scale` via the circuit settings.
 `_scalingFactorMul` is needed to correct the values to the appropriate ranges as `FixedPoint.ONE` is `1e18` on Balancer.
 
 **Note 2:** Currently this function is gated via the EZKL team, DM jseam or other EZKL core team members to get a pool included.
 
-4. Run `packages/foundry/contracts/utils/cronjob.py`. You will also need to set the right secrets in `secrets.py`. This script is used to call `ChainlinkPriceCache.update` and to call `FeeManager.setStaticSwapFeePercentage`.
+4. Run `packages/foundry/contracts/utils/cronjob_v2.py`. You will also need to set the right secrets in `secrets.py`. This script is used to call `ChainlinkPriceCache.update` and to call `FeeManagerV2.updateFee` and `FeeManagerV2.publishFee`.
 
-**Note 1:** You may also DM jseam or other EZKL core team members to include the address into the existing running cronjob script.
-
-**Note 2:** You will need an API key to access Lilith to produce the proofs, please DM jseam or other EZKL core team members
 
 ### Base Contract Deployment
 
@@ -70,11 +73,23 @@ This is a permissionless version
 #### Gryo E-CLP Pool
 - ~~[EZKL Gyro E-CLP Pool ysUSDC-waBasWETH Boosted Pool](https://balancer.fi/pools/base/v3/0xe0AFFb1e0EF262B0e2427515504f4A5e4B288c62) `0xe0AFFb1e0EF262B0e2427515504f4A5e4B288c62`~~
 
-- [EZKL Gyro E-CLP Pool USDC-cbBTC Pool](https://balancer.fi/pools/base/v3/0x1aE96B5A7Ccb602C51228729E4EF07f8e5Cf0557) `0x1aE96B5A7Ccb602C51228729E4EF07f8e5Cf0557`
+- ~~[EZKL Gyro E-CLP Pool USDC-cbBTC Pool ](https://balancer.fi/pools/base/v3/0x1aE96B5A7Ccb602C51228729E4EF07f8e5Cf0557) `0x1aE96B5A7Ccb602C51228729E4EF07f8e5Cf0557`~~
 
 - [WETH-USDC-EZKL](https://balancer.fi/pools/base/v3/0x81a85b9ec797110f2ee665c119e8f28a2456d6f1) `0x81a85b9ec797110f2ee665c119e8f28a2456d6f1`
 
-- [WBTC-USDC](https://balancer.fi/pools/base/v3/0x1aE96B5A7Ccb602C51228729E4EF07f8e5Cf0557) `0x1aE96B5A7Ccb602C51228729E4EF07f8e5Cf0557`
+- ~~[WBTC-USDC](https://balancer.fi/pools/base/v3/0x1aE96B5A7Ccb602C51228729E4EF07f8e5Cf0557) `0x1aE96B5A7Ccb602C51228729E4EF07f8e5Cf0557`~~
+
+### Sonic Contract Deployment
+
+#### Price Cache
+- [ETH/USD ChainlinkPriceCache](https://sonicscan.org/address/0x29d1AA89c6d380FC3F03A82E7A9207465bC9381d) `0x29d1AA89c6d380FC3F03A82E7A9207465bC9381d`
+
+#### Dynamic Fee Verifier
+- [ETHUSDDynamicFeeVerifier](https://sonicscan.org/address/0xa1e8a03882C5b5c3a3537C607578dD523f829bb6) `0xa1e8a03882C5b5c3a3537C607578dD523f829bb6`
+
+#### Fee Manager V2
+- [FeeManager](https://sonicscan.org/address/0x5c591971F4b3875A6d443b53a6fd7071C6e966fD) `0x5c591971F4b3875A6d443b53a6fd7071C6e966fD`
+
 
 ## COCSwapPools
 - TBD
