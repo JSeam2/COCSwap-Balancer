@@ -224,13 +224,13 @@ class ContractUpdater:
             base_fee_per_gas = latest_block.get('baseFeePerGas', self.w3.eth.gas_price)
             
             # Calculate max priority fee per gas (tip)
-            priority_fee_base = self.w3.to_wei(0.00136, 'gwei')
+            priority_fee_base = self.w3.to_wei(0.00186, 'gwei')
             priority_multiplier = 1.0 + (retry_count * 0.2)
             max_priority_fee_per_gas = int(priority_fee_base * priority_multiplier)
             
             # Calculate max fee per gas 
             # Formula: baseFeePerGas * buffer + maxPriorityFeePerGas
-            buffer = 1.2 + (retry_count * 0.2)  # Buffer increases with retries
+            buffer = 0.002 + (retry_count * 0.2)  # Buffer increases with retries
             max_fee_per_gas = int(base_fee_per_gas * buffer) + max_priority_fee_per_gas
             
             logger.info(f"Using max fee: {self.w3.from_wei(max_fee_per_gas, 'gwei')} Gwei, max priority fee: {self.w3.from_wei(max_priority_fee_per_gas, 'gwei')} Gwei (retry {retry_count})")
@@ -499,13 +499,13 @@ class ContractUpdater:
             
             # Calculate max priority fee per gas (tip)
             # Start with 1.5 Gwei and increase based on retry count
-            priority_fee_base = self.w3.to_wei(0.00136, 'gwei')
+            priority_fee_base = self.w3.to_wei(0.00186, 'gwei')
             priority_multiplier = 1.0 + (retry_count * 0.2)  # 20% increase per retry
             max_priority_fee_per_gas = int(priority_fee_base * priority_multiplier)
             
             # Calculate max fee per gas 
             # Formula: baseFeePerGas * buffer + maxPriorityFeePerGas
-            buffer = 1.2 + (retry_count * 0.2)  # Buffer increases with retries
+            buffer = 0.002 + (retry_count * 0.2)  # Buffer increases with retries
             max_fee_per_gas = int(base_fee_per_gas * buffer) + max_priority_fee_per_gas
             
             logger.info(f"Using max fee: {self.w3.from_wei(max_fee_per_gas, 'gwei')} Gwei, max priority fee: {self.w3.from_wei(max_priority_fee_per_gas, 'gwei')} Gwei (retry {retry_count})")

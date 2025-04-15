@@ -239,13 +239,13 @@ class ContractUpdater:
             base_fee_per_gas = latest_block.get('baseFeePerGas', self.w3.eth.gas_price)
             
             # Calculate max priority fee per gas (tip)
-            priority_fee_base = self.w3.to_wei(0.00136, 'gwei')
+            priority_fee_base = self.w3.to_wei(0.00186, 'gwei')
             priority_multiplier = 1.0 + (retry_count * 0.2)  # 10% increase per retry
             max_priority_fee_per_gas = int(priority_fee_base * priority_multiplier)
             
             # Calculate max fee per gas 
             # Formula: baseFeePerGas * buffer + maxPriorityFeePerGas
-            buffer = 1.2 + (retry_count * 0.2)  # Buffer increases with retries
+            buffer = 0.002 + (retry_count * 0.2)  # Buffer increases with retries
             max_fee_per_gas = int(base_fee_per_gas * buffer) + max_priority_fee_per_gas
             
             logger.info(f"Using max fee: {self.w3.from_wei(max_fee_per_gas, 'gwei')} Gwei, max priority fee: {self.w3.from_wei(max_priority_fee_per_gas, 'gwei')} Gwei (retry {retry_count})")
@@ -491,6 +491,146 @@ class ContractUpdater:
             logger.error(f"Error parsing response: {str(e)}")
             logger.error(traceback.format_exc())
 
+    def check_missing_pool_updated_events(self):
+        """
+        Check which pools haven't had PoolUpdated events after the dynamicFee was updated
+        Returns a list of pool addresses that need publishFee to be called
+        """
+        try:
+            # Get current block number
+            current_block = self.w3.eth.block_number
+            
+            # Look back approximately 1 hour
+            from_block = max(0, current_block - LOG_LOOKBACK)
+            
+            # Get the current dynamic fee
+            dynamic_fee = self.fee_manager_contract.functions.dynamicFee().call()
+            logger.info(f"Current dynamicFee: {dynamic_fee}")
+            
+            # Get all PoolUpdated events within the lookback period
+            pool_updated_events = self.fee_manager_contract.events.PoolUpdated().get_logs(from_block=from_block)
+            logger.info(f"Found {len(pool_updated_events)} PoolUpdated events")
+            
+            # Extract pools that had PoolUpdated events with the current dynamic fee
+            updated_pools = []
+            for event in pool_updated_events:
+                pool = event.args.pool
+                fee = event.args.swapFeePercentage
+                
+                if fee == dynamic_fee:
+                    updated_pools.append(pool.lower())
+                    logger.info(f"Pool {pool} already has PoolUpdated event with fee {fee}")
+            
+            # Find pools that need publishFee called
+            missing_pools = []
+            for pool in self.pool_contract_addresses:
+                if pool.lower() not in updated_pools:
+                    missing_pools.append(pool)
+                    logger.info(f"Pool {pool} needs publishFee to be called")
+            
+            return missing_pools
+            
+        except Exception as e:
+            logger.error(f"Error checking for PoolUpdated events: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
+            # If we can't check, assume all pools need updating to be safe
+            return self.pool_contract_addresses
+
+    def call_publish_fee_for_pools(self, pools, retry_count=0):
+        """Call the publishFee function for specific pools with gas price adjustments on retries"""
+        if not pools:
+            logger.info("No pools to update with publishFee")
+            return True
+            
+        try:
+            # First simulate the transaction to check if it would succeed
+            publish_fee_fn = self.fee_manager_contract.functions.publishFee(pools)
+
+            # Create simulation parameters
+            sim_params = {'from': self.wallet_address}
+
+            # Simulate the transaction
+            success, error = self.simulate_transaction(publish_fee_fn, sim_params)
+
+            if not success:
+                logger.warning(f"publishFee transaction simulation failed: {error}")
+                return False
+
+            logger.info(f"publishFee transaction simulation successful for {len(pools)} pools, proceeding with actual transaction")
+
+            # Get latest block info
+            latest_block = self.w3.eth.get_block("latest")
+            base_fee_per_gas = latest_block.get('baseFeePerGas', self.w3.eth.gas_price)
+
+            # Calculate max priority fee per gas (tip)
+            priority_fee_base = self.w3.to_wei(0.00186, 'gwei')
+            priority_multiplier = 1.0 + (retry_count * 0.2)
+            max_priority_fee_per_gas = int(priority_fee_base * priority_multiplier)
+
+            # Calculate max fee per gas
+            # Formula: baseFeePerGas * buffer + maxPriorityFeePerGas
+            buffer = 0.002 + (retry_count * 0.2)  # Buffer increases with retries
+            max_fee_per_gas = int(base_fee_per_gas * buffer) + max_priority_fee_per_gas
+
+            logger.info(f"Using max fee: {self.w3.from_wei(max_fee_per_gas, 'gwei')} Gwei, max priority fee: {self.w3.from_wei(max_priority_fee_per_gas, 'gwei')} Gwei (retry {retry_count})")
+
+            # Get the transaction count for nonce
+            nonce = self.w3.eth.get_transaction_count(self.wallet_address)
+            logger.info(f"Using nonce: {nonce}")
+
+            # Use a fixed gas limit instead of estimating
+            gas_limit = 3000000  # Fixed gas limit for publishFee
+            logger.info(f"Using fixed gas limit: {gas_limit}")
+
+            # Build the transaction with fixed gas limit and EIP-1559 gas parameters
+            tx = publish_fee_fn.build_transaction({
+                'from': self.wallet_address,
+                'nonce': nonce,
+                'gas': gas_limit,
+                'maxFeePerGas': max_fee_per_gas,
+                'maxPriorityFeePerGas': max_priority_fee_per_gas,
+                'type': 2,  # EIP-1559 transaction type
+                'chainId': self.w3.eth.chain_id,
+            })
+
+            # Debug transaction details
+            logger.debug(f"publishFee transaction details: {tx}")
+
+            # Sign the transaction
+            signed_tx = self.w3.eth.account.sign_transaction(tx, self.private_key)
+            logger.info(f"publishFee transaction signed. Hash: {self.w3.to_hex(self.w3.keccak(signed_tx.raw_transaction))}")
+
+            # Send the transaction
+            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+            logger.info(f"publishFee transaction sent: 0x{tx_hash.hex()}")
+
+            # Wait for transaction receipt with a timeout
+            try:
+                receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
+                logger.info(f"publishFee transaction confirmed in block {receipt['blockNumber']}")
+
+                # Check status of transaction
+                if receipt['status'] == 1:
+                    logger.info(f"publishFee transaction succeeded. Gas used: {receipt['gasUsed']}")
+                    return True
+                else:
+                    logger.error(f"publishFee transaction failed. Gas used: {receipt['gasUsed']}")
+                    return False
+            except Exception as timeout_error:
+                logger.warning(f"publishFee transaction may be pending: {str(timeout_error)}")
+                return False
+
+        except Exception as e:
+            error_message = str(e)
+            logger.error(f"Error calling publishFee function: {error_message}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return False
+            
+    def call_publish_fee(self, retry_count=0):
+        """Call publishFee for all pools (legacy method, kept for compatibility)"""
+        return self.call_publish_fee_for_pools(self.pool_contract_addresses, retry_count)
+
     def call_update_fee(self, retry_count=0):
         """Call the update function on the contract with gas price adjustments on retries"""
         try:
@@ -518,13 +658,13 @@ class ContractUpdater:
             
             # Calculate max priority fee per gas (tip)
             # Start with 1.5 Gwei and increase based on retry count
-            priority_fee_base = self.w3.to_wei(0.00136, 'gwei')
+            priority_fee_base = self.w3.to_wei(0.00186, 'gwei')
             priority_multiplier = 1.0 + (retry_count * 0.2)
             max_priority_fee_per_gas = int(priority_fee_base * priority_multiplier)
             
             # Calculate max fee per gas 
             # Formula: baseFeePerGas * buffer + maxPriorityFeePerGas
-            buffer = 1.2 + (retry_count * 0.2)  # Buffer increases with retries
+            buffer = 0.002 + (retry_count * 0.2)  # Buffer increases with retries
             max_fee_per_gas = int(base_fee_per_gas * buffer) + max_priority_fee_per_gas
             
             logger.info(f"Using max fee: {self.w3.from_wei(max_fee_per_gas, 'gwei')} Gwei, max priority fee: {self.w3.from_wei(max_priority_fee_per_gas, 'gwei')} Gwei (retry {retry_count})")
@@ -808,6 +948,24 @@ class ContractUpdater:
                                     success, error = self.call_update_fee()
                                     if success:
                                         logger.info("Successfully updated fee")
+
+                                        # 4. Wait for 2 minutes to ensure updateFee transaction is confirmed
+                                        logger.info("Waiting for 2 minutes before checking PoolUpdated events...")
+                                        time.sleep(120)
+                                        
+                                        # 5. Check if PoolUpdated events were emitted for all pools
+                                        missing_pool_updates = self.check_missing_pool_updated_events()
+                                        
+                                        # 6. Call publishFee only for pools that didn't get PoolUpdated events
+                                        if missing_pool_updates:
+                                            logger.info(f"Calling publishFee for {len(missing_pool_updates)} pools that didn't get PoolUpdated events")
+                                            publish_success = self.call_publish_fee_for_pools(missing_pool_updates)
+                                            if publish_success:
+                                                logger.info("Successfully published fee to pools")
+                                            else:
+                                                logger.error("Failed to publish fee to pools")
+                                        else:
+                                            logger.info("All pools already have PoolUpdated events. No need to call publishFee.")
                                     else:
                                         logger.error(f"Failed to update fee: {error}")
                                         # If the error is something we can recover from by waiting, 
