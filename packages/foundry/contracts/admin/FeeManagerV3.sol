@@ -33,6 +33,9 @@ contract FeeManagerV3 {
    uint256 public immutable scalingFactorDiv;
    uint256 public immutable scalingFactorMul;
 
+   // signature expiry threshold time
+   uint256 public immutable signatureExpiryThreshold;
+
    // Mutable
    uint256 public dynamicFee;
 
@@ -60,7 +63,8 @@ contract FeeManagerV3 {
       address _litPublicKey,
       address _verifier,
       uint256 _scalingFactorDiv,
-      uint256 _scalingFactorMul
+      uint256 _scalingFactorMul,
+      uint256 _signatureExpiryThreshold
    ) {
       description = _description;
       vault = _vault;
@@ -68,12 +72,13 @@ contract FeeManagerV3 {
       verifier = IHalo2Verifier(_verifier);
       scalingFactorDiv = _scalingFactorDiv;
       scalingFactorMul = _scalingFactorMul;
+      signatureExpiryThreshold = _signatureExpiryThreshold;
    }
 
    /**
     * @notice Updates the dynamicFee on the FeeManager
     * @param proof ZK proof of the dynamic fee calculation
-    * @param data Bytes data to be passed to the verifier
+    * @param inputData data for the inputData
     * @param dynamicFeeUnscaled Unscaled dynamic fee value, this should be the last element of the instances in the proof file
     * @param signature Signature of the dynamic fee calculation
     */
@@ -83,11 +88,17 @@ contract FeeManagerV3 {
       uint256 dynamicFeeUnscaled,
       bytes memory signature
    ) public returns (bool) {
+      // Check if the signature has expired
+      uint256 inputDataLength = inputData.length;
+
+      if (block.timestamp > uint256(inputData[inputDataLength]) + signatureExpiryThreshold) {
+         revert SignatureFailed();
+      }
       // check input data sig
       (address recovered, , ) = ECDSA.tryRecover(
          keccak256(abi.encode(inputData)),
          signature
-      )
+      );
 
       if (recovered != litPublicKey) {
          revert SignatureFailed();
@@ -95,7 +106,6 @@ contract FeeManagerV3 {
 
 
       // Get historical price and construct instances
-      uint256 inputDataLength = inputData.length;
       uint256[] memory instances = new uint256[](inputDataLength + 1);
 
       for (uint256 i = 0; i < inputDataLength; ++i) {

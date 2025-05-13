@@ -1,6 +1,7 @@
 secrets.py
 secrets.py.ethusd*
 secrets.py.btcusd*
+secrets.py.susd*
 test
 __pycache__/
 contract_updater.log
