@@ -131,8 +131,4 @@ contract FeeManagerV3 {
 
       return true;
    }
-
-   function _litPKtoAddress(bytes litPK) internal pure returns (address) {
-      return address(uint160(uint256(litPK)));
-   }
 }
