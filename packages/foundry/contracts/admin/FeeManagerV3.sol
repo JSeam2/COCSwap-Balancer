@@ -10,7 +10,6 @@ import { IVaultAdmin } from "@balancer-labs/v3-interfaces/contracts/vault/IVault
 import { IBasePoolFactory } from "@balancer-labs/v3-interfaces/contracts/vault/IBasePoolFactory.sol";
 import { IProtocolFeeController } from "@balancer-labs/v3-interfaces/contracts/vault/IProtocolFeeController.sol";
 import { IHalo2Verifier } from "../utils/IHalo2Verifier.sol";
-import { IChainlinkPriceCache } from "../utils/ChainlinkPriceCache.sol";
 
 /**
  * @title FeeManagerV2
@@ -79,31 +78,33 @@ contract FeeManagerV3 {
     * @notice Updates the dynamicFee on the FeeManager
     * @param proof ZK proof of the dynamic fee calculation
     * @param inputData data for the inputData
+    * @param timestamp Timestamp of the data
     * @param dynamicFeeUnscaled Unscaled dynamic fee value, this should be the last element of the instances in the proof file
     * @param signature Signature of the dynamic fee calculation
     */
    function updateFee(
       bytes calldata proof,
       uint256[] calldata inputData,
+      uint256 timestamp,
       uint256 dynamicFeeUnscaled,
       bytes memory signature
    ) public returns (bool) {
       // Check if the signature has expired
       uint256 inputDataLength = inputData.length;
 
-      if (block.timestamp > uint256(inputData[inputDataLength]) + signatureExpiryThreshold) {
+      if (block.timestamp > timestamp + signatureExpiryThreshold) {
          revert SignatureFailed();
       }
       // check input data sig
       (address recovered, , ) = ECDSA.tryRecover(
-         keccak256(abi.encode(inputData)),
+         keccak256(abi.encode(inputData, timestamp)),
          signature
       );
 
+      // Check if the keys match
       if (recovered != litPublicKey) {
          revert SignatureFailed();
       }
-
 
       // Get historical price and construct instances
       uint256[] memory instances = new uint256[](inputDataLength + 1);
